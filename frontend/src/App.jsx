@@ -1,12 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
-import { OpenVideo, OpenFilePicker, SwitchTab, CloseTab, TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState, ToggleFullscreen, GetVersion } from '../wailsjs/go/main/App';
-import { EventsOn } from '../wailsjs/runtime/runtime';
+import {
+    OpenVideo, OpenFilePicker, SwitchTab, CloseTab,
+    TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
+    ToggleFullscreen, GetVersion,
+} from '../wailsjs/go/main/App';
+import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
+import { debugLog } from './debug';
 import TabBar from './components/TabBar';
 import HomeScreen from './components/HomeScreen';
 import VideoControls from './components/VideoControls';
+import DebugPage from './components/DebugPage';
+import ChangelogPage from './components/ChangelogPage';
+
+// Each tab: { id, type: 'video'|'debug'|'changelog', title }
+const PAGE_TITLES = { debug: 'Debug', changelog: 'Changelog' };
 
 function App() {
-    const [videoTabs, setVideoTabs] = useState([]);
+    const [tabs, setTabs] = useState([]);
     const [activeTabId, setActiveTabId] = useState(null);
     const [info, setInfo] = useState({ time_pos: 0, duration: 0, paused: true });
     const [tabsState, setTabsState] = useState({});
@@ -14,49 +24,70 @@ function App() {
     const [version, setVersion] = useState('');
     const [isDragging, setIsDragging] = useState(false);
 
-    // One-time setup
+    const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
+
+    // Shared: open a file path as a new video tab
+    const openVideoPath = useCallback(async (filePath) => {
+        const filename = filePath.split(/[\\/]/).pop();
+        debugLog('OpenVideo', 'opening: ' + filePath);
+        try {
+            const tabId = await OpenVideo(filePath);
+            debugLog('OpenVideo', 'success tabId=' + tabId);
+            setTabs(prev => [...prev, { id: tabId, type: 'video', title: filename }]);
+            await SwitchTab(tabId);
+            setActiveTabId(tabId);
+            setInfo({ time_pos: 0, duration: 0, paused: true });
+        } catch (e) {
+            debugLog('OpenVideo', 'ERROR: ' + e);
+        }
+    }, []);
+
     useEffect(() => {
         GetVersion().then(setVersion).catch(() => {});
 
-        EventsOn('file-dropped', async (filePath) => {
-            const filename = filePath.split(/[\\/]/).pop();
-            try {
-                const tabId = await OpenVideo(filePath);
-                setVideoTabs(prev => [...prev, { id: tabId, filename }]);
-                await SwitchTab(tabId);
-                setActiveTabId(tabId);
-                setInfo({ time_pos: 0, duration: 0, paused: true });
-            } catch (e) {
-                console.error('Failed to open video:', e);
-            }
+        EventsOn('debug-log', (payload) => {
+            debugLog(payload?.source ?? 'go', payload?.message ?? String(payload));
         });
-
         EventsOn('fullscreen-changed', setIsFullscreen);
 
-        // Drag visual feedback
-        const onDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+        // JS-side OnFileDrop is the correct Wails v2 API for WebView2 file drops.
+        // Go's runtime.OnFileDrop only works for Win32-level drops and never fires here.
+        OnFileDrop(async (x, y, paths) => {
+            debugLog('OnFileDrop', `x=${x} y=${y} paths=${paths.join(', ')}`);
+            for (const p of paths) await openVideoPath(p);
+        }, false); // false = fire on any drop, not just --wails-drop-target elements
+
+        const onDragEnter = () => { setIsDragging(true); };
+        const onDragOver = (e) => e.preventDefault();
         const onDragLeave = (e) => { if (!e.relatedTarget) setIsDragging(false); };
-        const onDrop = (e) => { e.preventDefault(); setIsDragging(false); };
+        const onDrop = (e) => {
+            e.preventDefault();
+            setIsDragging(false);
+            const files = [...(e.dataTransfer?.files ?? [])].map(f => f.name);
+            debugLog('Drag', 'browser drop (fallback) — ' + (files.length ? files.join(', ') : 'no files'));
+        };
+        window.addEventListener('dragenter', onDragEnter);
         window.addEventListener('dragover', onDragOver);
         window.addEventListener('dragleave', onDragLeave);
         window.addEventListener('drop', onDrop);
         return () => {
+            OnFileDropOff();
+            window.removeEventListener('dragenter', onDragEnter);
             window.removeEventListener('dragover', onDragOver);
             window.removeEventListener('dragleave', onDragLeave);
             window.removeEventListener('drop', onDrop);
         };
-    }, []);
+    }, [openVideoPath]);
 
-    // Poll active tab's playback info
+    // Poll playback info only when a video tab is active
     useEffect(() => {
-        if (!activeTabId) return;
+        if (!activeTabId || activeTab?.type !== 'video') return;
         const id = setInterval(() => {
             GetPlaybackInfo(activeTabId).then(setInfo).catch(() => {});
         }, 500);
         return () => clearInterval(id);
-    }, [activeTabId]);
+    }, [activeTabId, activeTab?.type]);
 
-    // Poll all tabs' playing state (for tab indicators)
     useEffect(() => {
         const id = setInterval(() => {
             GetAllTabsState().then(setTabsState).catch(() => {});
@@ -66,95 +97,136 @@ function App() {
 
     const handleSwitchTab = useCallback(async (tabId) => {
         if (tabId === activeTabId) return;
-        await SwitchTab(tabId ?? '');
+        const tab = tabId ? tabs.find(t => t.id === tabId) : null;
+        await SwitchTab(tab?.type === 'video' ? tabId : '');
         setActiveTabId(tabId ?? null);
         setInfo({ time_pos: 0, duration: 0, paused: true });
+    }, [activeTabId, tabs]);
+
+    const handleCloseTab = useCallback(async (tabId) => {
+        const idx = tabs.findIndex(t => t.id === tabId);
+        const tab = tabs.find(t => t.id === tabId);
+        if (tab?.type === 'video') await CloseTab(tabId);
+        const newTabs = tabs.filter(t => t.id !== tabId);
+        setTabs(newTabs);
+
+        if (tabId === activeTabId) {
+            const next = newTabs[Math.min(idx, newTabs.length - 1)] ?? null;
+            await SwitchTab(next?.type === 'video' ? next.id : '');
+            setActiveTabId(next?.id ?? null);
+            setInfo({ time_pos: 0, duration: 0, paused: true });
+        }
+    }, [tabs, activeTabId]);
+
+    const openPageTab = useCallback((type) => {
+        const existing = tabs.find(t => t.type === type);
+        if (existing) {
+            handleSwitchTab(existing.id);
+            return;
+        }
+        const id = `${type}-${Date.now()}`;
+        SwitchTab('').catch(console.error);
+        setTabs(prev => [...prev, { id, type, title: PAGE_TITLES[type] }]);
+        setActiveTabId(id);
+    }, [tabs, handleSwitchTab]);
+
+    const handleReorderTab = useCallback((fromId, toId) => {
+        setTabs(prev => {
+            const fromIdx = prev.findIndex(t => t.id === fromId);
+            const toIdx = prev.findIndex(t => t.id === toId);
+            if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+            const next = [...prev];
+            const [moved] = next.splice(fromIdx, 1);
+            next.splice(toIdx, 0, moved);
+            return next;
+        });
+    }, []);
+
+    const handleTogglePlayback = useCallback(() => {
+        if (!activeTabId) return;
+        TogglePlayback(activeTabId).catch(console.error);
+        setTimeout(() => {
+            GetPlaybackInfo(activeTabId).then(setInfo).catch(() => {});
+            GetAllTabsState().then(setTabsState).catch(() => {});
+        }, 50);
     }, [activeTabId]);
 
     const handleOpenFile = useCallback(async () => {
         try {
             const filePath = await OpenFilePicker();
             if (!filePath) return;
-            const filename = filePath.split(/[\\/]/).pop();
-            const tabId = await OpenVideo(filePath);
-            setVideoTabs(prev => [...prev, { id: tabId, filename }]);
-            await SwitchTab(tabId);
-            setActiveTabId(tabId);
-            setInfo({ time_pos: 0, duration: 0, paused: true });
+            debugLog('OpenFilePicker', 'selected: ' + filePath);
+            await openVideoPath(filePath);
         } catch (e) {
-            console.error('Failed to open file:', e);
+            debugLog('OpenFilePicker', 'ERROR: ' + e);
         }
-    }, []);
+    }, [openVideoPath]);
 
-    const handleCloseTab = useCallback(async (tabId) => {
-        const idx = videoTabs.findIndex(t => t.id === tabId);
-        await CloseTab(tabId);
-        const newTabs = videoTabs.filter(t => t.id !== tabId);
-        setVideoTabs(newTabs);
-
-        if (tabId === activeTabId) {
-            const next = newTabs[Math.min(idx, newTabs.length - 1)];
-            const nextId = next?.id ?? null;
-            await SwitchTab(nextId ?? '');
-            setActiveTabId(nextId);
-            setInfo({ time_pos: 0, duration: 0, paused: true });
-        }
-    }, [videoTabs, activeTabId]);
-
-    // Keyboard shortcuts
     useEffect(() => {
         const onKey = (e) => {
             const tag = document.activeElement?.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
-            if (e.code === 'Space' && activeTabId) {
+            if (e.code === 'Space' && activeTab?.type === 'video') {
                 e.preventDefault();
-                TogglePlayback(activeTabId).catch(console.error);
+                handleTogglePlayback();
             }
-            if (e.code === 'KeyF') {
-                ToggleFullscreen().catch(console.error);
-            }
+            if (e.code === 'KeyF') ToggleFullscreen().catch(console.error);
             if (e.ctrlKey && e.code === 'KeyW' && activeTabId) {
                 e.preventDefault();
                 handleCloseTab(activeTabId);
             }
-            if (e.ctrlKey && e.code === 'Tab' && videoTabs.length > 1) {
+            if (e.ctrlKey && e.code === 'Tab' && tabs.length > 1) {
                 e.preventDefault();
-                const idx = videoTabs.findIndex(t => t.id === activeTabId);
+                const idx = tabs.findIndex(t => t.id === activeTabId);
                 const next = e.shiftKey
-                    ? (idx - 1 + videoTabs.length) % videoTabs.length
-                    : (idx + 1) % videoTabs.length;
-                handleSwitchTab(videoTabs[next].id);
+                    ? (idx - 1 + tabs.length) % tabs.length
+                    : (idx + 1) % tabs.length;
+                handleSwitchTab(tabs[next].id);
+            }
+            if (e.ctrlKey && e.shiftKey && (e.code === 'PageUp' || e.code === 'PageDown') && activeTabId) {
+                e.preventDefault();
+                const dir = e.code === 'PageUp' ? -1 : 1;
+                setTabs(prev => {
+                    const idx = prev.findIndex(t => t.id === activeTabId);
+                    const newIdx = idx + dir;
+                    if (newIdx < 0 || newIdx >= prev.length) return prev;
+                    const next = [...prev];
+                    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+                    return next;
+                });
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [activeTabId, videoTabs, handleCloseTab, handleSwitchTab]);
+    }, [activeTabId, activeTab, tabs, handleCloseTab, handleSwitchTab, handleTogglePlayback, setTabs]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
             {!isFullscreen && (
                 <TabBar
-                    tabs={videoTabs}
+                    tabs={tabs}
                     activeTabId={activeTabId}
                     tabsState={tabsState}
                     onSwitch={handleSwitchTab}
                     onClose={handleCloseTab}
                     onOpenFile={handleOpenFile}
+                    onOpenDebug={() => openPageTab('debug')}
+                    onOpenChangelog={() => openPageTab('changelog')}
+                    onReorder={handleReorderTab}
                 />
             )}
-            <div style={{ flex: 1, position: 'relative' }}>
-                {activeTabId === null && (
-                    <HomeScreen version={version} isDragging={isDragging} />
-                )}
-                {activeTabId !== null && (
+            <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+                {!activeTabId && <HomeScreen version={version} isDragging={isDragging} onOpenChangelog={() => openPageTab('changelog')} />}
+                {activeTab?.type === 'video' && (
                     <VideoControls
                         info={info}
-                        onTogglePlayback={() => TogglePlayback(activeTabId).catch(console.error)}
+                        onTogglePlayback={handleTogglePlayback}
                         onSeek={(pos) => Seek(activeTabId, pos).catch(console.error)}
                         onDoubleClick={() => ToggleFullscreen().catch(console.error)}
                     />
                 )}
+                {activeTab?.type === 'debug' && <DebugPage />}
+                {activeTab?.type === 'changelog' && <ChangelogPage />}
             </div>
         </div>
     );

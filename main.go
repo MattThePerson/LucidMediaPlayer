@@ -31,7 +31,7 @@ func main() {
 		},
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop:     true,
-			DisableWebViewDrop: false,
+			DisableWebViewDrop: false, // JS-side OnFileDrop requires WebView2 to see the drop
 		},
 		Bind: []interface{}{
 			app,

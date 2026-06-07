@@ -119,17 +119,27 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) onDomReady(ctx context.Context) {
+	if a.parentHWND != 0 {
+		// dev hot-reload fires onDomReady again — HWND already found, skip
+		a.emitDebug("startup", "onDomReady re-fired (dev reload), skipping")
+		return
+	}
 	hwnd, err := getWailsHWND("AwesomeVideoPlayer")
 	if err != nil {
+		a.emitDebug("startup", "FindWindowW failed: "+err.Error())
 		fmt.Println("HWND error:", err)
 		return
 	}
 	a.parentHWND = hwnd
+	a.emitDebug("startup", fmt.Sprintf("parentHWND=%d — ready", hwnd))
+	// File drop is handled via JS-side OnFileDrop (window.runtime.OnFileDrop),
+	// not Go's runtime.OnFileDrop, because WebView2 owns the drop event.
+}
 
-	runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
-		if len(paths) > 0 {
-			runtime.EventsEmit(ctx, "file-dropped", paths[0])
-		}
+func (a *App) emitDebug(source, message string) {
+	runtime.EventsEmit(a.ctx, "debug-log", map[string]string{
+		"source":  source,
+		"message": message,
 	})
 }
 
@@ -150,6 +160,7 @@ func (a *App) shutdown(ctx context.Context) {
 
 // OpenVideo launches a new mpv instance for the given file and returns a tabID.
 func (a *App) OpenVideo(filePath string) (string, error) {
+	a.emitDebug("OpenVideo", "starting: "+filePath)
 	tabID := fmt.Sprintf("tab-%d", time.Now().UnixNano())
 	pipeName := fmt.Sprintf(`\\.\pipe\mpvsocket-%s`, tabID)
 
@@ -167,16 +178,20 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
 	if err := cmd.Start(); err != nil {
+		a.emitDebug("OpenVideo", "mpv start failed: "+err.Error())
 		return "", fmt.Errorf("mpv start: %w", err)
 	}
+	a.emitDebug("OpenVideo", fmt.Sprintf("mpv pid=%d, connecting IPC...", cmd.Process.Pid))
 
 	conn, err := connectMpvPipe(pipeName, 5*time.Second)
 	if err != nil {
 		cmd.Process.Kill()
+		a.emitDebug("OpenVideo", "IPC connect failed: "+err.Error())
 		return "", fmt.Errorf("IPC connect: %w", err)
 	}
 
 	childHWND := waitForNewChildHWND(a.parentHWND, before, 3*time.Second)
+	a.emitDebug("OpenVideo", fmt.Sprintf("childHWND=%d tabID=%s", childHWND, tabID))
 
 	// Start hidden; SwitchTab will make it visible.
 	if childHWND != 0 {
@@ -196,9 +211,12 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 	a.tabsMu.Unlock()
 
 	go tab.startReader()
-
-	fmt.Printf("Opened tab %s (hwnd=%d)\n", tabID, childHWND)
 	return tabID, nil
+}
+
+// GetChangelog returns the embedded CHANGELOG.md content.
+func (a *App) GetChangelog() string {
+	return getChangelog()
 }
 
 // SwitchTab hides all mpv windows and shows the requested tab's window.
@@ -260,13 +278,19 @@ func (a *App) CloseTab(tabID string) error {
 	}
 	a.tabsMu.Unlock()
 
+	// Quit via IPC first — stops audio immediately and lets mpv exit cleanly.
+	// Kill() is a fallback for the case where IPC is already broken.
+	_ = tab.writeIPC(`{"command": ["quit"]}` + "\n")
+
 	tab.ipcMu.Lock()
 	if tab.ipcConn != nil {
 		tab.ipcConn.Close()
+		tab.ipcConn = nil
 	}
 	tab.ipcMu.Unlock()
 
 	if tab.mpvCmd != nil && tab.mpvCmd.Process != nil {
+		a.emitDebug("CloseTab", fmt.Sprintf("killing pid=%d", tab.mpvCmd.Process.Pid))
 		tab.mpvCmd.Process.Kill()
 	}
 	return nil

@@ -10,6 +10,10 @@ export function GetAllTabsState() {
   return window['go']['main']['App']['GetAllTabsState']();
 }
 
+export function GetChangelog() {
+  return window['go']['main']['App']['GetChangelog']();
+}
+
 export function GetPlaybackInfo(arg1) {
   return window['go']['main']['App']['GetPlaybackInfo'](arg1);
 }

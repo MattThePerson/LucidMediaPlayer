@@ -23,13 +23,22 @@ function AppIcon({ className }) {
     );
 }
 
-export default function HomeScreen({ version, isDragging }) {
+export default function HomeScreen({ version, isDragging, onOpenChangelog }) {
     return (
-        <div className={`home-screen${isDragging ? ' dragging' : ''}`}>
+        <div className="home-screen">
             <AppIcon className="home-icon" />
             <div className="home-title">Awesome Video Player</div>
-            <div className="home-version">Version {version}</div>
-            <div className="home-hint">Drop a video to get started</div>
+            <div className="home-version" onClick={onOpenChangelog} role="button" tabIndex={0}>
+                Version {version}
+            </div>
+            {isDragging && (
+                <div className="drop-overlay">
+                    <svg className="drop-overlay-arrow" width="44" height="44" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 3v13M5 11l7 7 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="drop-overlay-text">Drop to play</span>
+                </div>
+            )}
         </div>
     );
 }

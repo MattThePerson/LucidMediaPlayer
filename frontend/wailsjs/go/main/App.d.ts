@@ -6,6 +6,8 @@ export function CloseTab(arg1:string):Promise<void>;
 
 export function GetAllTabsState():Promise<Record<string, boolean>>;
 
+export function GetChangelog():Promise<string>;
+
 export function GetPlaybackInfo(arg1:string):Promise<main.PlaybackInfo>;
 
 export function GetVersion():Promise<string>;
