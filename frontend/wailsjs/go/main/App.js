@@ -42,6 +42,10 @@ export function OpenVideo(arg1) {
   return window['go']['main']['App']['OpenVideo'](arg1);
 }
 
+export function ResizeVideo() {
+  return window['go']['main']['App']['ResizeVideo']();
+}
+
 export function Seek(arg1, arg2) {
   return window['go']['main']['App']['Seek'](arg1, arg2);
 }

@@ -3,6 +3,7 @@ import {
     OpenVideo, OpenFilePicker, SwitchTab, CloseTab,
     TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
     ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
+    ResizeVideo,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog } from './debug';
@@ -96,6 +97,17 @@ function App() {
             GetAllTabsState().then(setTabsState).catch(() => {});
         }, 1000);
         return () => clearInterval(id);
+    }, []);
+
+    // Keep the active video window correctly sized when the Wails window is resized.
+    useEffect(() => {
+        let timer;
+        const onResize = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => ResizeVideo().catch(() => {}), 200);
+        };
+        window.addEventListener('resize', onResize);
+        return () => { clearTimeout(timer); window.removeEventListener('resize', onResize); };
     }, []);
 
     const handleSwitchTab = useCallback(async (tabId) => {

@@ -22,6 +22,8 @@ export function OpenFilePicker():Promise<string>;
 
 export function OpenVideo(arg1:string):Promise<string>;
 
+export function ResizeVideo():Promise<void>;
+
 export function Seek(arg1:string,arg2:number):Promise<void>;
 
 export function SwitchTab(arg1:string):Promise<void>;

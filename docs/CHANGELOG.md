@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.16] — 2026-06-07
+- Increase resize debounce from 16ms to 200ms to eliminate MoveWindow spam during drag
+
+## [0.0.15] — 2026-06-07
+- Fix video covered by tab bar: use MoveWindow to offset mpv child window by 36px (tab bar height)
+- Position is applied on open, on tab switch, on window resize (16ms debounce), and on fullscreen toggle
+
 ## [0.0.14] — 2026-06-07
 - Recently Opened is now a hover fly-out submenu (▸) instead of an inline list
 

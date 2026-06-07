@@ -20,18 +20,24 @@ import (
 )
 
 var (
-	modUser32   = syscall.NewLazyDLL("user32.dll")
-	findWindowW = modUser32.NewProc("FindWindowW")
-	showWindowW = modUser32.NewProc("ShowWindow")
-	getWindowW  = modUser32.NewProc("GetWindow")
+	modUser32      = syscall.NewLazyDLL("user32.dll")
+	findWindowW    = modUser32.NewProc("FindWindowW")
+	showWindowW    = modUser32.NewProc("ShowWindow")
+	getWindowW     = modUser32.NewProc("GetWindow")
+	getClientRectW = modUser32.NewProc("GetClientRect")
+	moveWindowW    = modUser32.NewProc("MoveWindow")
 )
 
 const (
-	swHide    = uintptr(0)
-	swShow    = uintptr(5)
-	gwChild   = uintptr(5)
+	swHide     = uintptr(0)
+	swShow     = uintptr(5)
+	gwChild    = uintptr(5)
 	gwHwndNext = uintptr(2)
+
+	tabBarHeight = 36 // must match .tab-bar height in style.css
 )
+
+type winRECT struct{ Left, Top, Right, Bottom int32 }
 
 // PlaybackInfo is returned to the frontend for a given tab.
 type PlaybackInfo struct {
@@ -193,8 +199,9 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 	childHWND := waitForNewChildHWND(a.parentHWND, before, 3*time.Second)
 	a.emitDebug("OpenVideo", fmt.Sprintf("childHWND=%d tabID=%s", childHWND, tabID))
 
-	// Start hidden; SwitchTab will make it visible.
+	// Pre-position while hidden so it's in the right place when SwitchTab reveals it.
 	if childHWND != 0 {
+		a.positionChildWindow(childHWND)
 		setWindowVisibility(childHWND, false)
 	}
 
@@ -243,6 +250,7 @@ func (a *App) SwitchTab(tabID string) error {
 		return fmt.Errorf("tab %s not found", tabID)
 	}
 	if tab.childHWND != 0 {
+		a.positionChildWindow(tab.childHWND)
 		setWindowVisibility(tab.childHWND, true)
 	}
 	a.activeTabID = tabID
@@ -362,10 +370,39 @@ func (a *App) ToggleFullscreen() {
 		a.isFullscreen = true
 		runtime.EventsEmit(a.ctx, "fullscreen-changed", true)
 	}
+	// Reposition immediately for the y-offset flip; the frontend resize listener
+	// will follow up with the correct final dimensions once the window settles.
+	a.ResizeVideo()
 }
 
 func (a *App) GetVersion() string {
 	return getAppVersion()
+}
+
+// positionChildWindow sizes and places hwnd so it fills the parent client area
+// below the tab bar (or the whole area when fullscreen).
+func (a *App) positionChildWindow(hwnd uintptr) {
+	var r winRECT
+	getClientRectW.Call(a.parentHWND, uintptr(unsafe.Pointer(&r)))
+	w := uintptr(r.Right - r.Left)
+	h := uintptr(r.Bottom - r.Top)
+	yOff := uintptr(0)
+	if !a.isFullscreen {
+		yOff = uintptr(tabBarHeight)
+	}
+	moveWindowW.Call(hwnd, 0, yOff, w, h-yOff, 1)
+}
+
+// ResizeVideo repositions the active video window to match the current client
+// size. Called by the frontend on window resize events.
+func (a *App) ResizeVideo() {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[a.activeTabID]
+	a.tabsMu.RUnlock()
+	if !ok || tab.childHWND == 0 {
+		return
+	}
+	a.positionChildWindow(tab.childHWND)
 }
 
 // GetRecentFiles returns up to displayRecentFiles recently-opened paths.
