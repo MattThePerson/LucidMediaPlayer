@@ -1,28 +1,19 @@
-import {useState} from 'react';
-import logo from './assets/images/logo-universal.png';
-import './App.css';
-import {Greet} from "../wailsjs/go/main/App";
+import { useEffect } from 'react';
+import { TogglePlayback } from '../wailsjs/go/main/App';
 
 function App() {
-    const [resultText, setResultText] = useState("Please enter your name below 👇");
-    const [name, setName] = useState('');
-    const updateName = (e) => setName(e.target.value);
-    const updateResultText = (result) => setResultText(result);
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                TogglePlayback().catch(console.error);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
 
-    function greet() {
-        Greet(name).then(updateResultText);
-    }
-
-    return (
-        <div id="App">
-            <img src={logo} id="logo" alt="logo"/>
-            <div id="result" className="result">{resultText}</div>
-            <div id="input" className="input-box">
-                <input id="name" className="input" onChange={updateName} autoComplete="off" name="input" type="text"/>
-                <button className="btn" onClick={greet}>Greet</button>
-            </div>
-        </div>
-    )
+    return <div id="App" />;
 }
 
-export default App
+export default App;
