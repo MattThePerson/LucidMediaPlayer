@@ -3,10 +3,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -15,22 +16,102 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 var (
 	modUser32   = syscall.NewLazyDLL("user32.dll")
 	findWindowW = modUser32.NewProc("FindWindowW")
+	showWindowW = modUser32.NewProc("ShowWindow")
+	getWindowW  = modUser32.NewProc("GetWindow")
 )
 
+const (
+	swHide    = uintptr(0)
+	swShow    = uintptr(5)
+	gwChild   = uintptr(5)
+	gwHwndNext = uintptr(2)
+)
+
+// PlaybackInfo is returned to the frontend for a given tab.
+type PlaybackInfo struct {
+	TimePos  float64 `json:"time_pos"`
+	Duration float64 `json:"duration"`
+	Paused   bool    `json:"paused"`
+}
+
+// TabInstance owns one mpv subprocess and its associated state.
+type TabInstance struct {
+	filePath  string
+	mpvCmd    *exec.Cmd
+	ipcConn   net.Conn
+	ipcMu     sync.Mutex
+	childHWND uintptr
+
+	stateMu  sync.RWMutex
+	timePos  float64
+	duration float64
+	paused   bool
+}
+
+func (t *TabInstance) writeIPC(msg string) error {
+	t.ipcMu.Lock()
+	defer t.ipcMu.Unlock()
+	if t.ipcConn == nil {
+		return fmt.Errorf("not connected")
+	}
+	_, err := fmt.Fprint(t.ipcConn, msg)
+	return err
+}
+
+func (t *TabInstance) startReader() {
+	t.ipcMu.Lock()
+	conn := t.ipcConn
+	fmt.Fprint(conn, `{"command": ["observe_property", 1, "time-pos"]}`+"\n")
+	fmt.Fprint(conn, `{"command": ["observe_property", 2, "duration"]}`+"\n")
+	fmt.Fprint(conn, `{"command": ["observe_property", 3, "pause"]}`+"\n")
+	t.ipcMu.Unlock()
+
+	scanner := bufio.NewScanner(conn)
+	for scanner.Scan() {
+		var msg map[string]interface{}
+		if json.Unmarshal(scanner.Bytes(), &msg) != nil {
+			continue
+		}
+		if msg["event"] != "property-change" {
+			continue
+		}
+		t.stateMu.Lock()
+		switch msg["name"] {
+		case "time-pos":
+			if v, ok := msg["data"].(float64); ok {
+				t.timePos = v
+			}
+		case "duration":
+			if v, ok := msg["data"].(float64); ok {
+				t.duration = v
+			}
+		case "pause":
+			if v, ok := msg["data"].(bool); ok {
+				t.paused = v
+			}
+		}
+		t.stateMu.Unlock()
+	}
+}
+
+// App is the Wails application struct.
 type App struct {
-	ctx     context.Context
-	mpvCmd  *exec.Cmd
-	ipcConn net.Conn
-	ipcMu   sync.Mutex
+	ctx          context.Context
+	parentHWND   uintptr
+	tabsMu       sync.RWMutex
+	tabs         map[string]*TabInstance
+	activeTabID  string
+	isFullscreen bool
 }
 
 func NewApp() *App {
-	return &App{}
+	return &App{tabs: make(map[string]*TabInstance)}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -38,90 +119,280 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) onDomReady(ctx context.Context) {
-	go a.launchMpv()
-}
-
-func (a *App) shutdown(ctx context.Context) {
-	a.ipcMu.Lock()
-	if a.ipcConn != nil {
-		a.ipcConn.Close()
-		a.ipcConn = nil
-	}
-	a.ipcMu.Unlock()
-
-	if a.mpvCmd != nil && a.mpvCmd.Process != nil {
-		a.mpvCmd.Process.Kill()
-	}
-}
-
-func (a *App) launchMpv() {
 	hwnd, err := getWailsHWND("AwesomeVideoPlayer")
 	if err != nil {
 		fmt.Println("HWND error:", err)
 		return
 	}
+	a.parentHWND = hwnd
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Println("Getwd error:", err)
-		return
+	runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
+		if len(paths) > 0 {
+			runtime.EventsEmit(ctx, "file-dropped", paths[0])
+		}
+	})
+}
+
+func (a *App) shutdown(ctx context.Context) {
+	a.tabsMu.Lock()
+	defer a.tabsMu.Unlock()
+	for _, tab := range a.tabs {
+		tab.ipcMu.Lock()
+		if tab.ipcConn != nil {
+			tab.ipcConn.Close()
+		}
+		tab.ipcMu.Unlock()
+		if tab.mpvCmd != nil && tab.mpvCmd.Process != nil {
+			tab.mpvCmd.Process.Kill()
+		}
 	}
-	videoPath := filepath.Join(cwd, "video.mp4")
+}
 
-	pipeName := `\\.\pipe\mpvsocket`
+// OpenVideo launches a new mpv instance for the given file and returns a tabID.
+func (a *App) OpenVideo(filePath string) (string, error) {
+	tabID := fmt.Sprintf("tab-%d", time.Now().UnixNano())
+	pipeName := fmt.Sprintf(`\\.\pipe\mpvsocket-%s`, tabID)
 
-	a.mpvCmd = exec.Command(
+	before := getDirectChildren(a.parentHWND)
+
+	cmd := exec.Command(
 		"mpv",
-		fmt.Sprintf("--wid=%d", hwnd),
+		fmt.Sprintf("--wid=%d", a.parentHWND),
 		fmt.Sprintf("--input-ipc-server=%s", pipeName),
 		"--pause",
 		"--no-terminal",
-		videoPath,
+		"--keep-open=yes",
+		filePath,
 	)
-	a.mpvCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
-	if err := a.mpvCmd.Start(); err != nil {
-		fmt.Println("mpv start error:", err)
-		return
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("mpv start: %w", err)
 	}
 
 	conn, err := connectMpvPipe(pipeName, 5*time.Second)
 	if err != nil {
-		fmt.Println("mpv IPC error:", err)
-		return
+		cmd.Process.Kill()
+		return "", fmt.Errorf("IPC connect: %w", err)
 	}
 
-	a.ipcMu.Lock()
-	a.ipcConn = conn
-	a.ipcMu.Unlock()
-	fmt.Println("mpv ready")
-}
+	childHWND := waitForNewChildHWND(a.parentHWND, before, 3*time.Second)
 
-func (a *App) TogglePlayback() error {
-	a.ipcMu.Lock()
-	conn := a.ipcConn
-	a.ipcMu.Unlock()
-
-	if conn == nil {
-		return fmt.Errorf("mpv not connected")
+	// Start hidden; SwitchTab will make it visible.
+	if childHWND != 0 {
+		setWindowVisibility(childHWND, false)
 	}
-	_, err := fmt.Fprint(conn, "{\"command\": [\"cycle\", \"pause\"]}\n")
-	return err
+
+	tab := &TabInstance{
+		filePath:  filePath,
+		mpvCmd:    cmd,
+		ipcConn:   conn,
+		childHWND: childHWND,
+		paused:    true,
+	}
+
+	a.tabsMu.Lock()
+	a.tabs[tabID] = tab
+	a.tabsMu.Unlock()
+
+	go tab.startReader()
+
+	fmt.Printf("Opened tab %s (hwnd=%d)\n", tabID, childHWND)
+	return tabID, nil
 }
+
+// SwitchTab hides all mpv windows and shows the requested tab's window.
+// Pass an empty string to show the home screen (all windows hidden).
+func (a *App) SwitchTab(tabID string) error {
+	a.tabsMu.Lock()
+	defer a.tabsMu.Unlock()
+
+	for _, tab := range a.tabs {
+		if tab.childHWND != 0 {
+			setWindowVisibility(tab.childHWND, false)
+		}
+	}
+
+	if tabID == "" {
+		a.activeTabID = ""
+		runtime.WindowSetTitle(a.ctx, "AwesomeVideoPlayer")
+		return nil
+	}
+
+	tab, ok := a.tabs[tabID]
+	if !ok {
+		return fmt.Errorf("tab %s not found", tabID)
+	}
+	if tab.childHWND != 0 {
+		setWindowVisibility(tab.childHWND, true)
+	}
+	a.activeTabID = tabID
+	runtime.WindowSetTitle(a.ctx, "AwesomeVideoPlayer — "+filepath.Base(tab.filePath))
+	return nil
+}
+
+// OpenFilePicker opens a native file dialog and returns the selected path (or "" if cancelled).
+func (a *App) OpenFilePicker() (string, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Open Video",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Video Files", Pattern: "*.mp4;*.mkv;*.avi;*.mov;*.webm;*.flv;*.wmv;*.m4v;*.ts;*.m2ts"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	return path, err
+}
+
+// CloseTab kills the mpv process for the given tab.
+func (a *App) CloseTab(tabID string) error {
+	a.tabsMu.Lock()
+	tab, ok := a.tabs[tabID]
+	if !ok {
+		a.tabsMu.Unlock()
+		return nil
+	}
+	if tab.childHWND != 0 {
+		setWindowVisibility(tab.childHWND, false)
+	}
+	delete(a.tabs, tabID)
+	if a.activeTabID == tabID {
+		a.activeTabID = ""
+	}
+	a.tabsMu.Unlock()
+
+	tab.ipcMu.Lock()
+	if tab.ipcConn != nil {
+		tab.ipcConn.Close()
+	}
+	tab.ipcMu.Unlock()
+
+	if tab.mpvCmd != nil && tab.mpvCmd.Process != nil {
+		tab.mpvCmd.Process.Kill()
+	}
+	return nil
+}
+
+func (a *App) TogglePlayback(tabID string) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("tab not found")
+	}
+	return tab.writeIPC(`{"command": ["cycle", "pause"]}` + "\n")
+}
+
+func (a *App) Seek(tabID string, pos float64) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return nil
+	}
+	tab.stateMu.RLock()
+	dur := tab.duration
+	tab.stateMu.RUnlock()
+	if dur == 0 {
+		return nil
+	}
+	return tab.writeIPC(fmt.Sprintf(`{"command": ["seek", %f, "absolute"]}`+"\n", pos*dur))
+}
+
+func (a *App) GetPlaybackInfo(tabID string) PlaybackInfo {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return PlaybackInfo{Paused: true}
+	}
+	tab.stateMu.RLock()
+	defer tab.stateMu.RUnlock()
+	return PlaybackInfo{
+		TimePos:  tab.timePos,
+		Duration: tab.duration,
+		Paused:   tab.paused,
+	}
+}
+
+// GetAllTabsState returns a map of tabID → isPlaying for tab indicators.
+func (a *App) GetAllTabsState() map[string]bool {
+	a.tabsMu.RLock()
+	defer a.tabsMu.RUnlock()
+	result := make(map[string]bool)
+	for id, tab := range a.tabs {
+		tab.stateMu.RLock()
+		result[id] = !tab.paused && tab.duration > 0
+		tab.stateMu.RUnlock()
+	}
+	return result
+}
+
+func (a *App) ToggleFullscreen() {
+	if a.isFullscreen {
+		runtime.WindowUnfullscreen(a.ctx)
+		a.isFullscreen = false
+		runtime.EventsEmit(a.ctx, "fullscreen-changed", false)
+	} else {
+		runtime.WindowFullscreen(a.ctx)
+		a.isFullscreen = true
+		runtime.EventsEmit(a.ctx, "fullscreen-changed", true)
+	}
+}
+
+func (a *App) GetVersion() string {
+	return getAppVersion()
+}
+
+// ── Win32 helpers ────────────────────────────────────────────────────────────
 
 func getWailsHWND(title string) (uintptr, error) {
 	titlePtr, err := syscall.UTF16PtrFromString(title)
 	if err != nil {
 		return 0, err
 	}
-	ret, _, callErr := findWindowW.Call(
-		0,
-		uintptr(unsafe.Pointer(titlePtr)),
-	)
+	ret, _, callErr := findWindowW.Call(0, uintptr(unsafe.Pointer(titlePtr)))
 	if ret == 0 {
-		return 0, fmt.Errorf("FindWindowW returned 0: %w", callErr)
+		return 0, fmt.Errorf("FindWindowW: %w", callErr)
 	}
 	return ret, nil
+}
+
+func getDirectChildren(parent uintptr) []uintptr {
+	var children []uintptr
+	child, _, _ := getWindowW.Call(parent, gwChild)
+	for child != 0 {
+		children = append(children, child)
+		child, _, _ = getWindowW.Call(child, gwHwndNext)
+	}
+	return children
+}
+
+func waitForNewChildHWND(parent uintptr, before []uintptr, timeout time.Duration) uintptr {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		for _, h := range getDirectChildren(parent) {
+			isNew := true
+			for _, b := range before {
+				if h == b {
+					isNew = false
+					break
+				}
+			}
+			if isNew {
+				return h
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return 0
+}
+
+func setWindowVisibility(hwnd uintptr, visible bool) {
+	flag := swHide
+	if visible {
+		flag = swShow
+	}
+	showWindowW.Call(hwnd, flag)
 }
 
 func connectMpvPipe(path string, timeout time.Duration) (net.Conn, error) {

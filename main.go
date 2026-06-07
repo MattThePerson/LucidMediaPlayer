@@ -29,6 +29,10 @@ func main() {
 		Windows: &windows.Options{
 			WebviewIsTransparent: true,
 		},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop:     true,
+			DisableWebViewDrop: false,
+		},
 		Bind: []interface{}{
 			app,
 		},
