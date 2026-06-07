@@ -211,6 +211,7 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 	a.tabsMu.Unlock()
 
 	go tab.startReader()
+	pushRecentFile(filePath)
 	return tabID, nil
 }
 
@@ -365,6 +366,32 @@ func (a *App) ToggleFullscreen() {
 
 func (a *App) GetVersion() string {
 	return getAppVersion()
+}
+
+// GetRecentFiles returns up to displayRecentFiles recently-opened paths.
+func (a *App) GetRecentFiles() []RecentEntry {
+	entries, _ := loadRecentFiles()
+	if len(entries) > displayRecentFiles {
+		entries = entries[:displayRecentFiles]
+	}
+	if entries == nil {
+		return []RecentEntry{}
+	}
+	return entries
+}
+
+// ClearRecentFiles wipes the recently-opened list.
+func (a *App) ClearRecentFiles() {
+	_ = saveRecentFiles(nil)
+}
+
+// GetAppDataDir returns the app data directory path (useful for diagnostics).
+func (a *App) GetAppDataDir() string {
+	dir, err := appDataDir()
+	if err != nil {
+		return "(error: " + err.Error() + ")"
+	}
+	return dir
 }
 
 // ── Win32 helpers ────────────────────────────────────────────────────────────

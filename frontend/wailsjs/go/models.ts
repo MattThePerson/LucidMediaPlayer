@@ -16,6 +16,22 @@ export namespace main {
 	        this.paused = source["paused"];
 	    }
 	}
+	export class RecentEntry {
+	    path: string;
+	    filename: string;
+	    openedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecentEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.filename = source["filename"];
+	        this.openedAt = source["openedAt"];
+	    }
+	}
 
 }
 

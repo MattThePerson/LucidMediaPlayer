@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
     OpenVideo, OpenFilePicker, SwitchTab, CloseTab,
     TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
-    ToggleFullscreen, GetVersion,
+    ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog } from './debug';
@@ -23,6 +23,7 @@ function App() {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [version, setVersion] = useState('');
     const [isDragging, setIsDragging] = useState(false);
+    const [recentFiles, setRecentFiles] = useState([]);
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
 
@@ -37,6 +38,7 @@ function App() {
             await SwitchTab(tabId);
             setActiveTabId(tabId);
             setInfo({ time_pos: 0, duration: 0, paused: true });
+            GetRecentFiles().then(setRecentFiles).catch(() => {});
         } catch (e) {
             debugLog('OpenVideo', 'ERROR: ' + e);
         }
@@ -44,6 +46,7 @@ function App() {
 
     useEffect(() => {
         GetVersion().then(setVersion).catch(() => {});
+        GetRecentFiles().then(setRecentFiles).catch(() => {});
 
         EventsOn('debug-log', (payload) => {
             debugLog(payload?.source ?? 'go', payload?.message ?? String(payload));
@@ -130,6 +133,11 @@ function App() {
         setActiveTabId(id);
     }, [tabs, handleSwitchTab]);
 
+    const handleClearRecent = useCallback(() => {
+        ClearRecentFiles().catch(console.error);
+        setRecentFiles([]);
+    }, []);
+
     const handleReorderTab = useCallback((fromId, toId) => {
         setTabs(prev => {
             const fromIdx = prev.findIndex(t => t.id === fromId);
@@ -213,6 +221,9 @@ function App() {
                     onOpenDebug={() => openPageTab('debug')}
                     onOpenChangelog={() => openPageTab('changelog')}
                     onReorder={handleReorderTab}
+                    recentFiles={recentFiles}
+                    onOpenRecent={openVideoPath}
+                    onClearRecent={handleClearRecent}
                 />
             )}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.14] — 2026-06-07
+- Recently Opened is now a hover fly-out submenu (▸) instead of an inline list
+
+## [0.0.13] — 2026-06-07
+- Platform-specific AppData directory (`%APPDATA%\AwesomeVideoPlayer\` on Windows; `~/.config/…` on Linux; `~/Library/…` on macOS)
+- Recently opened files stored in `data/recent.json` (max 20, deduplicated, most-recent-first)
+- Hamburger dropdown shows "Recent" section with last 10 files; click to reopen, "Clear" to wipe list
+- `GetAppDataDir()` exposed for diagnostics (visible in debug output)
+
 ## [0.0.12] — 2026-06-07
 - Fix play/pause indicator lag: re-poll GetPlaybackInfo + GetAllTabsState 50ms after toggling
 
