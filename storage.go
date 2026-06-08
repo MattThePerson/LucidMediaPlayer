@@ -17,9 +17,9 @@ type RecentEntry struct {
 //
 // Layout:
 //
-//	Windows : %APPDATA%\SunsetVideoPlayer\
-//	macOS   : ~/Library/Application Support/SunsetVideoPlayer/
-//	Linux   : $XDG_CONFIG_HOME/SunsetVideoPlayer/  (fallback: ~/.config/…)
+//	Windows : %APPDATA%\LucidPlayer\
+//	macOS   : ~/Library/Application Support/LucidPlayer/
+//	Linux   : $XDG_CONFIG_HOME/LucidPlayer/  (fallback: ~/.config/…)
 func appDataDir() (string, error) {
 	var base string
 	switch runtime.GOOS {
@@ -50,7 +50,7 @@ func appDataDir() (string, error) {
 			base = filepath.Join(home, ".config")
 		}
 	}
-	dir := filepath.Join(base, "SunsetVideoPlayer")
+	dir := filepath.Join(base, "LucidPlayer")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.1.11] — 2026-06-08
+- Rename: "Sunset Video Player" → "Lucid Player"; AppData dir `SunsetVideoPlayer` → `LucidPlayer`; exe output `LucidPlayer`
+
 ## [0.1.10] — 2026-06-08
 - Fix: clicking progress bar no longer triggers play/pause toggle (missing stopPropagation let click bubble to player div)
 
@@ -28,8 +31,8 @@
 - Add: dragging a tab activates it on drop; drag ghost stays within tab bar
 
 ## [0.1.6] — 2026-06-08
-- SQLite database at `%APPDATA%\SunsetVideoPlayer\db.sqlite` (modernc.org/sqlite, no CGO)
-- Fix AppData folder name: `"Sunset Video Player"` (spaces) → `"SunsetVideoPlayer"` (PascalCase)
+- SQLite database at `%APPDATA%\LucidPlayer\db.sqlite` (modernc.org/sqlite, no CGO)
+- Fix AppData folder name: `"Sunset Video Player"` (spaces) → `"LucidPlayer"` (PascalCase)
 - Save/restore playback position: saves on pause, tab close, and shutdown; restores on re-open
 - Hash-based video identity: 3×64 KB SHA-256 so data survives file renames/moves
 - Recents now stored in DB (last_opened column) instead of `recent.json`

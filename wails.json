@@ -1,8 +1,8 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "Sunset Video Player",
-  "outputfilename": "SunsetVideoPlayer",
-  "version": "0.1.10",
+  "name": "Lucid Player",
+  "outputfilename": "LucidPlayer",
+  "version": "0.1.11",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",

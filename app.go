@@ -198,7 +198,7 @@ func (a *App) onDomReady(ctx context.Context) {
 		a.emitDebug("startup", "onDomReady re-fired (dev reload), skipping")
 		return
 	}
-	hwnd, err := getWailsHWND("Sunset Video Player")
+	hwnd, err := getWailsHWND("Lucid Player")
 	if err != nil {
 		a.emitDebug("startup", "FindWindowW failed: "+err.Error())
 		fmt.Println("HWND error:", err)
@@ -421,7 +421,7 @@ func (a *App) SwitchTab(tabID string) error {
 
 	if tabID == "" {
 		a.activeTabID = ""
-		runtime.WindowSetTitle(a.ctx, "Sunset Video Player")
+		runtime.WindowSetTitle(a.ctx, "Lucid Player")
 		return nil
 	}
 
@@ -434,7 +434,7 @@ func (a *App) SwitchTab(tabID string) error {
 		setWindowVisibility(tab.childHWND, true)
 	}
 	a.activeTabID = tabID
-	runtime.WindowSetTitle(a.ctx, "Sunset Video Player - "+filepath.Base(tab.filePath))
+	runtime.WindowSetTitle(a.ctx, "Lucid Player - "+filepath.Base(tab.filePath))
 	return nil
 }
 
