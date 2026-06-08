@@ -43,6 +43,36 @@ type PlaybackInfo struct {
 	Volume   float64 `json:"volume"`
 }
 
+// mpvTrackRaw matches MPV's track-list JSON format (hyphenated field names from MPV IPC).
+type mpvTrackRaw struct {
+	ID               int    `json:"id"`
+	Type             string `json:"type"`
+	Title            string `json:"title"`
+	Lang             string `json:"lang"`
+	Codec            string `json:"codec"`
+	Selected         bool   `json:"selected"`
+	External         bool   `json:"external"`
+	ExternalFilename string `json:"external-filename"`
+}
+
+// TrackInfo is the frontend representation of one media track.
+type TrackInfo struct {
+	ID               int    `json:"id"`
+	Type             string `json:"type"`
+	Title            string `json:"title"`
+	Lang             string `json:"lang"`
+	Codec            string `json:"codec"`
+	Selected         bool   `json:"selected"`
+	External         bool   `json:"external"`
+	ExternalFilename string `json:"externalFilename"`
+}
+
+// SubtitleState holds the subtitle track list and active track ID for the frontend.
+type SubtitleState struct {
+	Tracks    []TrackInfo `json:"tracks"`
+	ActiveSID int         `json:"activeSid"`
+}
+
 // TabInstance owns one mpv subprocess and its associated state.
 type TabInstance struct {
 	filePath  string
@@ -51,13 +81,16 @@ type TabInstance struct {
 	ipcMu     sync.Mutex
 	childHWND uintptr
 
-	stateMu  sync.RWMutex
-	timePos  float64
-	duration float64
-	paused   bool
-	volume   float64
-	dbID     int64
-	hash     string
+	stateMu   sync.RWMutex
+	timePos   float64
+	duration  float64
+	paused    bool
+	volume    float64
+	dbID      int64
+	hash      string
+	subText   string
+	trackList []TrackInfo
+	activeSid int
 }
 
 func (t *TabInstance) writeIPC(msg string) error {
@@ -80,9 +113,15 @@ func (t *TabInstance) startReader(a *App, tabID string, watchEOF bool) {
 	if watchEOF {
 		fmt.Fprint(conn, `{"command": ["observe_property", 5, "eof-reached"]}`+"\n")
 	}
+	fmt.Fprint(conn, `{"command": ["observe_property", 6, "sub-text"]}`+"\n")
+	fmt.Fprint(conn, `{"command": ["observe_property", 7, "track-list"]}`+"\n")
+	fmt.Fprint(conn, `{"command": ["observe_property", 8, "sid"]}`+"\n")
+	// Disable MPV's own subtitle rendering so the app displays subs via sub-text IPC property.
+	fmt.Fprint(conn, `{"command": ["set_property", "sub-visibility", false]}`+"\n")
 	t.ipcMu.Unlock()
 
 	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 256*1024), 256*1024) // track-list can be large JSON
 	for scanner.Scan() {
 		var msg map[string]interface{}
 		if json.Unmarshal(scanner.Bytes(), &msg) != nil {
@@ -91,7 +130,11 @@ func (t *TabInstance) startReader(a *App, tabID string, watchEOF bool) {
 		if msg["event"] != "property-change" {
 			continue
 		}
-		eofSignal := false
+		var eofSignal, emitSubText, emitSubTracks bool
+		var subTextVal string
+		var subTracksVal []TrackInfo
+		var activeSidVal int
+
 		t.stateMu.Lock()
 		switch msg["name"] {
 		case "time-pos":
@@ -118,10 +161,62 @@ func (t *TabInstance) startReader(a *App, tabID string, watchEOF bool) {
 			if v, ok := msg["data"].(bool); ok && v {
 				eofSignal = true
 			}
+		case "sub-text":
+			text := ""
+			if v, ok := msg["data"].(string); ok {
+				text = v
+			}
+			if text != t.subText {
+				t.subText = text
+				subTextVal = text
+				emitSubText = true
+			}
+		case "track-list":
+			if data := msg["data"]; data != nil {
+				if b, err := json.Marshal(data); err == nil {
+					var raw []mpvTrackRaw
+					if json.Unmarshal(b, &raw) == nil {
+						tracks := make([]TrackInfo, len(raw))
+						for i, r := range raw {
+							tracks[i] = TrackInfo{
+								ID: r.ID, Type: r.Type, Title: r.Title,
+								Lang: r.Lang, Codec: r.Codec, Selected: r.Selected,
+								External: r.External, ExternalFilename: r.ExternalFilename,
+							}
+						}
+						t.trackList = tracks
+						subTracksVal = tracks
+						activeSidVal = t.activeSid
+						emitSubTracks = true
+					}
+				}
+			}
+		case "sid":
+			newSid := 0
+			if data := msg["data"]; data != nil {
+				if v, ok := data.(float64); ok {
+					newSid = int(v)
+				}
+			}
+			t.activeSid = newSid
+			subTracksVal = t.trackList
+			activeSidVal = newSid
+			emitSubTracks = true
 		}
 		t.stateMu.Unlock()
+
 		if eofSignal {
 			runtime.EventsEmit(a.ctx, "playlist-video-ended", tabID)
+		}
+		if emitSubText {
+			runtime.EventsEmit(a.ctx, "subtitle-text", map[string]string{"tabID": tabID, "text": subTextVal})
+		}
+		if emitSubTracks {
+			runtime.EventsEmit(a.ctx, "subtitle-tracks", map[string]interface{}{
+				"tabID":     tabID,
+				"tracks":    subTracksVal,
+				"activeSid": activeSidVal,
+			})
 		}
 	}
 }
@@ -796,4 +891,54 @@ func (a *App) GetAppDataDir() string {
 		return "(error: " + err.Error() + ")"
 	}
 	return dir
+}
+
+// GetSubtitleState returns the current subtitle track list and active SID for the given tab.
+func (a *App) GetSubtitleState(tabID string) SubtitleState {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return SubtitleState{}
+	}
+	tab.stateMu.RLock()
+	defer tab.stateMu.RUnlock()
+	return SubtitleState{Tracks: tab.trackList, ActiveSID: tab.activeSid}
+}
+
+// SetSubtitleTrack selects a subtitle track by ID; sid=0 disables subtitles.
+func (a *App) SetSubtitleTrack(tabID string, sid int) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("tab %s not found", tabID)
+	}
+	if sid == 0 {
+		return tab.writeIPC(`{"command":["set_property","sid","no"]}` + "\n")
+	}
+	return tab.writeIPC(fmt.Sprintf(`{"command":["set_property","sid",%d]}`, sid) + "\n")
+}
+
+// AddSubtitleFile loads an external subtitle file into the given tab.
+func (a *App) AddSubtitleFile(tabID, path string) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("tab %s not found", tabID)
+	}
+	pathJSON, _ := json.Marshal(path)
+	return tab.writeIPC(fmt.Sprintf(`{"command":["sub-add",%s]}`, string(pathJSON)) + "\n")
+}
+
+// OpenSubtitleFilePicker opens a native file dialog for selecting a subtitle file.
+func (a *App) OpenSubtitleFilePicker() (string, error) {
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Open Subtitle File",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Subtitle Files", Pattern: "*.srt;*.ass;*.ssa;*.vtt;*.sub;*.idx"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
 }

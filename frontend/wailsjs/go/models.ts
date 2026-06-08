@@ -57,6 +57,64 @@ export namespace main {
 	        this.oneVideoAtATime = source["oneVideoAtATime"];
 	    }
 	}
+	export class TrackInfo {
+	    id: number;
+	    type: string;
+	    title: string;
+	    lang: string;
+	    codec: string;
+	    selected: boolean;
+	    external: boolean;
+	    externalFilename: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrackInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.title = source["title"];
+	        this.lang = source["lang"];
+	        this.codec = source["codec"];
+	        this.selected = source["selected"];
+	        this.external = source["external"];
+	        this.externalFilename = source["externalFilename"];
+	    }
+	}
+	export class SubtitleState {
+	    tracks: TrackInfo[];
+	    activeSid: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SubtitleState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tracks = this.convertValues(source["tracks"], TrackInfo);
+	        this.activeSid = source["activeSid"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

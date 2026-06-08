@@ -22,6 +22,8 @@ export class PassionPlayer {
         onFullscreen = null, // () => void — override native fullscreen
         onVolumeChange = null, // (volume: 0–100) => void
         onUIVisible = null,   // (visible: bool) => void — fires when controls show/hide
+        onSubtitleChange = null, // (sid: number) => void — 0 to disable
+        onAddSubtitleFile = null, // () => void
     }) {
         this.player_id = player_id;
         this.src = src;
@@ -43,6 +45,8 @@ export class PassionPlayer {
         this.onFullscreen = onFullscreen;
         this.onVolumeChange = onVolumeChange;
         this.onUIVisible = onUIVisible;
+        this.onSubtitleChange = onSubtitleChange;
+        this.onAddSubtitleFile = onAddSubtitleFile;
 
         this.root_element = null;
         this.shadow = null;
@@ -53,6 +57,12 @@ export class PassionPlayer {
         this._currentTime = 0;
         this._duration = 0;
         this._volume = 100;
+
+        /* subtitle state */
+        this._subtitleText = '';
+        this._subtitleTracks = [];
+        this._activeSid = 0;
+        this._subtitleMenuOpen = false;
 
         /* seek thumbs */
         this.seekThumbsContainer = null;
@@ -161,6 +171,7 @@ export class PassionPlayer {
         this._addPlayBtnEventListeners();
         this._addVolumeEventListeners();
         this._addFullscreenBtnEventListeners();
+        this._addSubtitleEventListeners();
         this._addScrollEventListeners();
         this._initControlsAutoHide();
     }
@@ -350,6 +361,7 @@ export class PassionPlayer {
         if (controls) { controls.style.transitionDuration = "500ms"; controls.style.opacity = "0"; }
         if (progress) { progress.style.transitionDuration = "500ms"; progress.style.opacity = "0"; }
         if (player) player.style.cursor = "none";
+        this._closeSubtitleMenu();
         this.onUIVisible?.(false);
     }
 
@@ -379,6 +391,11 @@ export class PassionPlayer {
                 </div>
             </div>
 
+            <!-- subtitle text overlay (always visible when text is present) -->
+            <div class="pp-subtitle-overlay">
+                <div class="pp-subtitle-text" style="display:none"></div>
+            </div>
+
             <!-- unified controls bar -->
             <div class="controls-bar">
                 <div class="controls-left">
@@ -394,6 +411,10 @@ export class PassionPlayer {
                     </div>
                 </div>
                 <div class="controls-right">
+                    <div class="pp-subtitle-control">
+                        <button class="pp-subtitle-btn" title="Subtitles">CC</button>
+                        <div class="pp-subtitle-menu" style="display:none"></div>
+                    </div>
                     <button class="pp-fullscreen-btn" title="Toggle Fullscreen">⛶</button>
                 </div>
             </div>
@@ -707,6 +728,111 @@ export class PassionPlayer {
         }
     }
 
+    // Push subtitle state from the backend.
+    setSubtitleState(text, tracks, activeSid) {
+        this._subtitleText = text ?? '';
+        this._subtitleTracks = tracks ?? [];
+        this._activeSid = activeSid ?? 0;
+
+        const textEl = this.$('.pp-subtitle-text');
+        if (textEl) {
+            textEl.textContent = this._subtitleText;
+            textEl.style.display = this._subtitleText ? '' : 'none';
+        }
+        this._updateSubtitleBtn();
+        if (this._subtitleMenuOpen) this._updateSubtitleMenu();
+    }
+
+    _addSubtitleEventListeners() {
+        const btn = this.$('.pp-subtitle-btn');
+        if (!btn) return;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this._toggleSubtitleMenu();
+        });
+        // Close menu when clicking anywhere in the player outside the subtitle control
+        const player = this.$('.PassionPlayer');
+        if (player) {
+            player.addEventListener('click', (e) => {
+                if (!e.target.closest('.pp-subtitle-control')) {
+                    this._closeSubtitleMenu();
+                }
+            });
+        }
+    }
+
+    _toggleSubtitleMenu() {
+        this._subtitleMenuOpen ? this._closeSubtitleMenu() : this._openSubtitleMenu();
+    }
+
+    _openSubtitleMenu() {
+        const menu = this.$('.pp-subtitle-menu');
+        if (!menu) return;
+        this._subtitleMenuOpen = true;
+        this._updateSubtitleMenu();
+        menu.style.display = '';
+    }
+
+    _closeSubtitleMenu() {
+        const menu = this.$('.pp-subtitle-menu');
+        if (!menu) return;
+        this._subtitleMenuOpen = false;
+        menu.style.display = 'none';
+    }
+
+    _updateSubtitleMenu() {
+        const menu = this.$('.pp-subtitle-menu');
+        if (!menu) return;
+        const subTracks = this._subtitleTracks.filter(t => t.type === 'sub');
+        let html = '';
+
+        const offActive = this._activeSid === 0;
+        html += `<div class="pp-subtitle-menu-item" data-sid="0">
+            <span class="check">${offActive ? '✓' : ''}</span>Off
+        </div>`;
+        for (const track of subTracks) {
+            const isActive = track.id === this._activeSid;
+            const label = track.title || track.lang || `Track ${track.id}${track.codec ? ' (' + track.codec + ')' : ''}`;
+            const extSuffix = track.external && track.externalFilename
+                ? ` [${this._basename(track.externalFilename)}]` : '';
+            html += `<div class="pp-subtitle-menu-item" data-sid="${track.id}">
+                <span class="check">${isActive ? '✓' : ''}</span>${label}${extSuffix}
+            </div>`;
+        }
+        html += `<div class="pp-subtitle-menu-separator"></div>`;
+        html += `<div class="pp-subtitle-menu-item pp-subtitle-add" data-action="add">
+            <span class="check"></span>Add subtitle file...
+        </div>`;
+        menu.innerHTML = html;
+
+        menu.querySelectorAll('.pp-subtitle-menu-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (item.dataset.action === 'add') {
+                    this._closeSubtitleMenu();
+                    this.onAddSubtitleFile?.();
+                } else {
+                    const sid = parseInt(item.dataset.sid, 10);
+                    this._activeSid = sid;
+                    this._closeSubtitleMenu();
+                    this._updateSubtitleBtn();
+                    this.onSubtitleChange?.(sid);
+                }
+            });
+        });
+    }
+
+    _updateSubtitleBtn() {
+        const btn = this.$('.pp-subtitle-btn');
+        if (!btn) return;
+        btn.classList.toggle('active', this._activeSid > 0);
+    }
+
+    _basename(path) {
+        if (!path) return '';
+        return path.split(/[\\/]/).pop();
+    }
+
     _formatTime(seconds_float) {
         if (!seconds_float || isNaN(seconds_float)) return "00:00";
 
@@ -962,6 +1088,120 @@ video {
     padding: 1px 5px;
     background: #0008;
     border-radius: 3px;
+}
+
+/* SUBTITLE OVERLAY */
+
+.pp-subtitle-overlay {
+    position: absolute;
+    bottom: 60px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    pointer-events: none;
+}
+
+.pp-subtitle-text {
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-size: 18px;
+    line-height: 1.4;
+    padding: 4px 14px;
+    border-radius: 4px;
+    max-width: 80%;
+    text-align: center;
+    white-space: pre-line;
+}
+
+/* SUBTITLE BUTTON */
+
+.pp-subtitle-control {
+    position: relative;
+}
+
+.pp-subtitle-btn {
+    width: 36px;
+    height: 36px;
+    background: #0007;
+    border: 1px solid #fff3;
+    border-radius: 6px;
+    color: #fff8;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 150ms, color 150ms;
+    flex-shrink: 0;
+    letter-spacing: -0.5px;
+    font-family: inherit;
+}
+.pp-subtitle-btn:hover {
+    background: #000b;
+    color: #fff;
+}
+.pp-subtitle-btn.active {
+    color: #fff;
+    border-color: #fff6;
+}
+
+/* SUBTITLE MENU */
+
+.pp-subtitle-menu {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    right: 0;
+    background: rgba(20, 20, 20, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    min-width: 160px;
+    max-width: 300px;
+    overflow: hidden;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+}
+
+.pp-subtitle-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 100ms;
+    font-family: inherit;
+}
+.pp-subtitle-menu-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+.pp-subtitle-menu-item .check {
+    width: 14px;
+    font-size: 12px;
+    flex-shrink: 0;
+    color: #7af;
+}
+.pp-subtitle-menu-separator {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 3px 0;
+}
+.pp-subtitle-add {
+    color: #aaa;
+}
+.pp-subtitle-add:hover {
+    color: #fff;
+}
+
+/* controls-right gap */
+.controls-right {
+    gap: 6px;
 }
 
         `;

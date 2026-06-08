@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.26] — 2026-06-09
+- Add: subtitle track selector (CC button in player controls) — select, disable, or add external subtitle files
+- Add: subtitle text overlay rendered by the app (MPV subtitle rendering disabled)
+- Add: `SetSubtitleTrack`, `AddSubtitleFile`, `OpenSubtitleFilePicker`, `GetSubtitleState` Go methods
+- Add: mpv IPC scanner buffer increased to 256KB (prevents truncation of large track-list JSON)
+
 ## [0.1.25] — 2026-06-08
 - Fix: tab playing indicator no longer causes layout shift (space always reserved; indicator opacity-toggled)
 - Add: app opens maximized on launch

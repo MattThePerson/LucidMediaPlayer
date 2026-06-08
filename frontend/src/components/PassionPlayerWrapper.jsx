@@ -2,7 +2,11 @@ import { useEffect, useRef } from 'react';
 import { PassionPlayer } from '../passion_player/PassionPlayer.js';
 import { debugLog } from '../debug';
 
-export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlayback, onSeek, onFullscreen, onVolumeChange, onUIVisible, clickToTogglePlayback }) {
+export default function PassionPlayerWrapper({
+    info, seekThumbs,
+    onTogglePlayback, onSeek, onFullscreen, onVolumeChange, onUIVisible, clickToTogglePlayback,
+    subtitleText, subtitleTracks, activeSid, onSubtitleChange, onAddSubtitleFile,
+}) {
     const hostRef = useRef(null);
     const playerRef = useRef(null);
 
@@ -13,11 +17,15 @@ export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlaybac
     const onFullscreenRef = useRef(onFullscreen);
     const onVolumeChangeRef = useRef(onVolumeChange);
     const onUIVisibleRef = useRef(onUIVisible);
+    const onSubtitleChangeRef = useRef(onSubtitleChange);
+    const onAddSubtitleFileRef = useRef(onAddSubtitleFile);
     onTogglePlaybackRef.current = onTogglePlayback;
     onSeekRef.current = onSeek;
     onFullscreenRef.current = onFullscreen;
     onVolumeChangeRef.current = onVolumeChange;
     onUIVisibleRef.current = onUIVisible;
+    onSubtitleChangeRef.current = onSubtitleChange;
+    onAddSubtitleFileRef.current = onAddSubtitleFile;
 
     useEffect(() => {
         playerRef.current = new PassionPlayer({
@@ -30,10 +38,12 @@ export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlaybac
                 debugLog('PlayerWrapper', `onPause fired @ ${Date.now()}`);
                 onTogglePlaybackRef.current?.();
             },
-            onSeek:       pos => onSeekRef.current?.(pos),
-            onFullscreen:     () => onFullscreenRef.current?.(),
-            onVolumeChange: vol => onVolumeChangeRef.current?.(vol),
-            onUIVisible:  vis => onUIVisibleRef.current?.(vis),
+            onSeek:             pos => onSeekRef.current?.(pos),
+            onFullscreen:        () => onFullscreenRef.current?.(),
+            onVolumeChange:     vol => onVolumeChangeRef.current?.(vol),
+            onUIVisible:        vis => onUIVisibleRef.current?.(vis),
+            onSubtitleChange:   sid => onSubtitleChangeRef.current?.(sid),
+            onAddSubtitleFile:   () => onAddSubtitleFileRef.current?.(),
             disable_keybinds: true,
             quiet: true,
         });
@@ -56,6 +66,10 @@ export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlaybac
     useEffect(() => {
         playerRef.current?.setClickToTogglePlayback(clickToTogglePlayback ?? false);
     }, [clickToTogglePlayback]);
+
+    useEffect(() => {
+        playerRef.current?.setSubtitleState(subtitleText, subtitleTracks, activeSid);
+    }, [subtitleText, subtitleTracks, activeSid]);
 
     return <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />;
 }

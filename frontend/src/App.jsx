@@ -7,6 +7,7 @@ import {
     ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
     ResizeVideo, SetVolume, GetSeekThumbnailData,
     GetPreferences, SavePreferences, StartSeekThumbnailGeneration, RegenerateSeekThumbnails,
+    GetSubtitleState, SetSubtitleTrack, AddSubtitleFile, OpenSubtitleFilePicker,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
@@ -35,6 +36,9 @@ function App() {
     const [seekThumbs, setSeekThumbs] = useState(null);
     const [notification, setNotification] = useState(null);
     const [isWorking, setIsWorking] = useState(false);
+    const [subtitleText, setSubtitleText] = useState('');
+    const [subtitleTracks, setSubtitleTracks] = useState([]);
+    const [activeSid, setActiveSid] = useState(0);
     const [recentOverlayOpen, setRecentOverlayOpen] = useState(false);
     const [videoUIVisible, setVideoUIVisible] = useState(false);
     const [preferences, setPreferences] = useState({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false });
@@ -68,6 +72,8 @@ function App() {
         activeTab?.type === 'video' ? activeTabId :
         activeTab?.type === 'playlist' ? (playlists[activeTabId]?.videoTabId ?? null) :
         null;
+    const effectiveVideoTabIdRef = useRef(effectiveVideoTabId);
+    effectiveVideoTabIdRef.current = effectiveVideoTabId;
 
     // tabsState with playlist tabs mapped to their underlying video tab's play state
     const effectiveTabsState = { ...tabsState };
@@ -261,6 +267,15 @@ function App() {
             debugLog(payload?.source ?? 'go', payload?.message ?? String(payload));
         });
         const offFullscreen = EventsOn('fullscreen-changed', setIsFullscreen);
+        const offSubtitleText = EventsOn('subtitle-text', ({ tabID, text }) => {
+            if (tabID === effectiveVideoTabIdRef.current) setSubtitleText(text);
+        });
+        const offSubtitleTracks = EventsOn('subtitle-tracks', ({ tabID, tracks, activeSid: sid }) => {
+            if (tabID === effectiveVideoTabIdRef.current) {
+                setSubtitleTracks(tracks ?? []);
+                setActiveSid(sid ?? 0);
+            }
+        });
         const offOpenFile = EventsOn('open-file', (path) => {
             // Drop into playlist if active, otherwise open new tab
             if (activeTabRef.current?.type === 'playlist') {
@@ -302,6 +317,8 @@ function App() {
         return () => {
             offDebugLog?.();
             offFullscreen?.();
+            offSubtitleText?.();
+            offSubtitleTracks?.();
             offOpenFile?.();
             offPlaylistEnded?.();
             OnFileDropOff();
@@ -311,6 +328,18 @@ function App() {
             window.removeEventListener('drop', onDrop);
         };
     }, [openVideoPath]);
+
+    // Reset subtitle state and fetch initial track list on video tab change
+    useEffect(() => {
+        setSubtitleText('');
+        setSubtitleTracks([]);
+        setActiveSid(0);
+        if (!effectiveVideoTabId) return;
+        GetSubtitleState(effectiveVideoTabId).then(state => {
+            if (state?.tracks) setSubtitleTracks(state.tracks);
+            if (state?.activeSid !== undefined) setActiveSid(state.activeSid);
+        }).catch(() => {});
+    }, [effectiveVideoTabId]);
 
     // Poll playback info when a video tab or playing playlist tab is active
     useEffect(() => {
@@ -520,6 +549,24 @@ function App() {
         const vidId = effectiveVideoTabId;
         if (!vidId) return;
         SetVolume(vidId, vol).catch(console.error);
+    }, [effectiveVideoTabId]);
+
+    const handleSubtitleChange = useCallback((sid) => {
+        const vidId = effectiveVideoTabId;
+        if (!vidId) return;
+        SetSubtitleTrack(vidId, sid).catch(console.error);
+    }, [effectiveVideoTabId]);
+
+    const handleAddSubtitleFile = useCallback(async () => {
+        const vidId = effectiveVideoTabId;
+        if (!vidId) return;
+        try {
+            const path = await OpenSubtitleFilePicker();
+            if (!path) return;
+            await AddSubtitleFile(vidId, path);
+        } catch (e) {
+            debugLog('Subtitle', 'add file error: ' + e);
+        }
     }, [effectiveVideoTabId]);
 
     const handleSavePreferences = useCallback((prefs) => {
@@ -752,6 +799,11 @@ function App() {
                             onVolumeChange={handleVolumeChange}
                             onUIVisible={setVideoUIVisible}
                             clickToTogglePlayback={preferences.clickToTogglePlayback}
+                            subtitleText={subtitleText}
+                            subtitleTracks={subtitleTracks}
+                            activeSid={activeSid}
+                            onSubtitleChange={handleSubtitleChange}
+                            onAddSubtitleFile={handleAddSubtitleFile}
                         />
                         {activeTab?.type === 'video' && <Notification notification={notification} />}
                         {isPlaylistPlaying && (

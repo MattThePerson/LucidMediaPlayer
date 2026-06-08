@@ -4,6 +4,8 @@ import {main} from '../models';
 import {db} from '../models';
 import {thumbs} from '../models';
 
+export function AddSubtitleFile(arg1:string,arg2:string):Promise<void>;
+
 export function ClearRecentFiles():Promise<void>;
 
 export function CloseTab(arg1:string):Promise<void>;
@@ -24,6 +26,8 @@ export function GetRecentFiles():Promise<Array<db.RecentEntry>>;
 
 export function GetSeekThumbnailData(arg1:string):Promise<thumbs.SeekThumbnailData>;
 
+export function GetSubtitleState(arg1:string):Promise<main.SubtitleState>;
+
 export function GetVersion():Promise<string>;
 
 export function LoadFile(arg1:string,arg2:string):Promise<void>;
@@ -36,6 +40,8 @@ export function OpenFolderPicker():Promise<string>;
 
 export function OpenPlaylistVideo(arg1:string):Promise<string>;
 
+export function OpenSubtitleFilePicker():Promise<string>;
+
 export function OpenVideo(arg1:string):Promise<string>;
 
 export function RegenerateSeekThumbnails(arg1:string):Promise<void>;
@@ -45,6 +51,8 @@ export function ResizeVideo():Promise<void>;
 export function SavePreferences(arg1:main.Preferences):Promise<void>;
 
 export function Seek(arg1:string,arg2:number):Promise<void>;
+
+export function SetSubtitleTrack(arg1:string,arg2:number):Promise<void>;
 
 export function SetVolume(arg1:string,arg2:number):Promise<void>;
 
