@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6] — 2026-06-08
+- SQLite database at `%APPDATA%\SunsetVideoPlayer\db.sqlite` (modernc.org/sqlite, no CGO)
+- Fix AppData folder name: `"Sunset Video Player"` (spaces) → `"SunsetVideoPlayer"` (PascalCase)
+- Save/restore playback position: saves on pause, tab close, and shutdown; restores on re-open
+- Hash-based video identity: 3×64 KB SHA-256 so data survives file renames/moves
+- Recents now stored in DB (last_opened column) instead of `recent.json`
+
 ## [0.1.5] — 2026-06-08
 - Fix PassionPlayer styles not loading: reuse existing shadow root instead of calling attachShadow twice (React Strict Mode double-mount)
 

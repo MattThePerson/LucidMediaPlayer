@@ -58,6 +58,8 @@ type TabInstance struct {
 	timePos  float64
 	duration float64
 	paused   bool
+	dbID     int64  // videos.id; 0 until DB upsert completes
+	hash     string // hex SHA-256 of 3×64 KB chunks; "" until background hash completes
 }
 
 func (t *TabInstance) writeIPC(msg string) error {
@@ -100,6 +102,10 @@ func (t *TabInstance) startReader() {
 		case "pause":
 			if v, ok := msg["data"].(bool); ok {
 				t.paused = v
+				if v && t.dbID != 0 {
+					pos, dbID := t.timePos, t.dbID
+					go dbSavePosition(dbID, pos) //nolint:errcheck
+				}
 			}
 		}
 		t.stateMu.Unlock()
@@ -122,6 +128,11 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	if err := initDB(); err != nil {
+		a.emitDebug("db", "initDB failed: "+err.Error())
+	} else {
+		a.emitDebug("db", "db opened")
+	}
 }
 
 func (a *App) onDomReady(ctx context.Context) {
@@ -152,7 +163,14 @@ func (a *App) emitDebug(source, message string) {
 func (a *App) shutdown(ctx context.Context) {
 	a.tabsMu.Lock()
 	defer a.tabsMu.Unlock()
-	for _, tab := range a.tabs {
+	for tabID, tab := range a.tabs {
+		tab.stateMu.RLock()
+		pos, dbID := tab.timePos, tab.dbID
+		tab.stateMu.RUnlock()
+		if dbID != 0 {
+			_ = dbSavePosition(dbID, pos)
+			a.emitDebug("db", fmt.Sprintf("saved %.1fs for %s on shutdown", pos, tabID))
+		}
 		tab.ipcMu.Lock()
 		if tab.ipcConn != nil {
 			tab.ipcConn.Close()
@@ -213,13 +231,108 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 		paused:    true,
 	}
 
+	// Upsert filepath into DB immediately so recents are updated right away.
+	// This also returns any previously saved hash and position for this path.
+	now := time.Now().Format(time.RFC3339)
+	var savedPos float64
+	if rec, err := dbUpsertFilepath(filePath, now); err == nil {
+		tab.dbID = rec.ID
+		tab.hash = rec.Hash
+		savedPos = rec.LastPos
+		a.emitDebug("db", fmt.Sprintf("filepath upsert id=%d hash=%q", rec.ID, shortHash(rec.Hash)))
+		if rec.Hash != "" && rec.LastPos > 0 {
+			a.emitDebug("db", fmt.Sprintf("filepath hit — restoring %.1fs", rec.LastPos))
+		} else if rec.Hash != "" {
+			a.emitDebug("db", "filepath hit — no saved position")
+		}
+	} else {
+		a.emitDebug("db", "filepath upsert error: "+err.Error())
+	}
+
+	// Register tab before starting goroutines so hashAndLookup can find it.
 	a.tabsMu.Lock()
 	a.tabs[tabID] = tab
 	a.tabsMu.Unlock()
 
 	go tab.startReader()
-	pushRecentFile(filePath)
+
+	if tab.hash != "" {
+		// Known file: hash already in DB; restore position if any.
+		if savedPos > 0 {
+			go restorePosition(tab, savedPos)
+		}
+	} else {
+		// Unknown file or DB unavailable: hash in background.
+		go a.hashAndLookup(tabID, filePath)
+	}
+
 	return tabID, nil
+}
+
+// restorePosition waits for mpv to load, then seeks to the saved position.
+func restorePosition(tab *TabInstance, pos float64) {
+	time.Sleep(600 * time.Millisecond)
+	_ = tab.writeIPC(fmt.Sprintf(`{"command":["set_property","time-pos",%f]}`+"\n", pos))
+}
+
+// hashAndLookup hashes filePath in the background, checks the DB for a known
+// record, and restores position if one is found.
+func (a *App) hashAndLookup(tabID, filePath string) {
+	start := time.Now()
+	a.emitDebug("hash", "hashing: "+filepath.Base(filePath))
+
+	hash, err := hashVideoFile(filePath)
+	if err != nil {
+		a.emitDebug("hash", "hash error: "+err.Error())
+		return
+	}
+	elapsed := time.Since(start)
+	a.emitDebug("hash", fmt.Sprintf("hashed %s in %dms → %s…", filepath.Base(filePath), elapsed.Milliseconds(), hash[:8]))
+
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		a.emitDebug("hash", "tab closed before hash completed, discarding")
+		return
+	}
+
+	now := time.Now().Format(time.RFC3339)
+
+	if rec, err := dbGetByHash(hash); err == nil {
+		// Hash match: same video under a different path — merge records.
+		a.emitDebug("db", fmt.Sprintf("hash hit — old path: %s", filepath.Base(rec.Filepath)))
+		if mergeErr := dbMergeHashRecord(rec.ID, tab.dbID, filePath, now); mergeErr != nil {
+			a.emitDebug("db", "merge error: "+mergeErr.Error())
+		}
+		tab.stateMu.Lock()
+		tab.dbID = rec.ID
+		tab.hash = hash
+		tab.stateMu.Unlock()
+		if rec.LastPos > 0 {
+			a.emitDebug("db", fmt.Sprintf("restoring %.1fs (hash match)", rec.LastPos))
+			go restorePosition(tab, rec.LastPos)
+		}
+	} else {
+		// New video: record the hash on the existing filepath row.
+		a.emitDebug("db", "new video — recording hash")
+		tab.stateMu.Lock()
+		tab.hash = hash
+		tab.stateMu.Unlock()
+		if tab.dbID != 0 {
+			if setErr := dbSetHash(tab.dbID, hash); setErr != nil {
+				a.emitDebug("db", "set hash error: "+setErr.Error())
+			}
+		}
+	}
+}
+
+// shortHash returns the first 8 chars of a hash (for debug output), or "" if empty.
+func shortHash(h string) string {
+	if len(h) >= 8 {
+		return h[:8]
+	}
+	return h
 }
 
 // GetChangelog returns the embedded CHANGELOG.md content.
@@ -286,6 +399,15 @@ func (a *App) CloseTab(tabID string) error {
 		a.activeTabID = ""
 	}
 	a.tabsMu.Unlock()
+
+	// Save playback position before closing.
+	tab.stateMu.RLock()
+	pos, dbID := tab.timePos, tab.dbID
+	tab.stateMu.RUnlock()
+	if dbID != 0 {
+		_ = dbSavePosition(dbID, pos)
+		a.emitDebug("db", fmt.Sprintf("saved position %.1fs on tab close", pos))
+	}
 
 	// Quit via IPC first — stops audio immediately and lets mpv exit cleanly.
 	// Kill() is a fallback for the case where IPC is already broken.
@@ -405,21 +527,22 @@ func (a *App) ResizeVideo() {
 	a.positionChildWindow(tab.childHWND)
 }
 
-// GetRecentFiles returns up to displayRecentFiles recently-opened paths.
+// GetRecentFiles returns up to 10 recently-opened paths from the DB.
 func (a *App) GetRecentFiles() []RecentEntry {
-	entries, _ := loadRecentFiles()
-	if len(entries) > displayRecentFiles {
-		entries = entries[:displayRecentFiles]
-	}
-	if entries == nil {
+	entries, err := dbGetRecents(10)
+	if err != nil {
+		a.emitDebug("db", "GetRecentFiles error: "+err.Error())
 		return []RecentEntry{}
 	}
 	return entries
 }
 
-// ClearRecentFiles wipes the recently-opened list.
+// ClearRecentFiles hides all entries from the recents list while preserving
+// hash and position data.
 func (a *App) ClearRecentFiles() {
-	_ = saveRecentFiles(nil)
+	if err := dbClearRecents(); err != nil {
+		a.emitDebug("db", "ClearRecentFiles error: "+err.Error())
+	}
 }
 
 // GetAppDataDir returns the app data directory path (useful for diagnostics).
