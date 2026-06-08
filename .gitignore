@@ -9,3 +9,4 @@ package.json.md5
 _*/
 binaries
 *.exe
+frontend/vite.config.js.timestamp-*

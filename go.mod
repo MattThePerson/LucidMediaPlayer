@@ -1,4 +1,4 @@
-module AwesomeVideoPlayer
+module lucidplayer
 
 go 1.25.0
 
