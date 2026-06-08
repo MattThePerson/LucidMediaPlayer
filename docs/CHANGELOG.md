@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.21] — 2026-06-08
+- Refactor: cross-platform build — app now compiles on Linux/macOS; mpv runs standalone (no HWND embedding) with Unix socket IPC
+- Refactor: Win32 code extracted to `platform_windows.go`; Linux/macOS stubs in `platform_linux.go`
+- Refactor: `database.go` → `internal/db`, `storage.go` → `internal/storage`, `thumbnails.go` → `internal/thumbs`
+
 ## [0.1.20] — 2026-06-08
 - Add: playlist tab type — create via hamburger "New Playlist" or "Open Folder as Playlist…" (Ctrl+K, O)
 - Add: playlist list view — drag to reorder, Del to remove, double-click or Enter to play, Up/Down to select

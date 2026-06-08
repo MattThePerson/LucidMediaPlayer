@@ -1,4 +1,4 @@
-package main
+package storage
 
 import (
 	"os"
@@ -6,21 +6,8 @@ import (
 	"runtime"
 )
 
-// RecentEntry is one item in the recently-opened list.
-type RecentEntry struct {
-	Path     string `json:"path"`
-	Filename string `json:"filename"`
-	OpenedAt string `json:"openedAt"`
-}
-
-// appDataDir returns (and creates) the platform-specific app data directory.
-//
-// Layout:
-//
-//	Windows : %APPDATA%\LucidPlayer\
-//	macOS   : ~/Library/Application Support/LucidPlayer/
-//	Linux   : $XDG_CONFIG_HOME/LucidPlayer/  (fallback: ~/.config/…)
-func appDataDir() (string, error) {
+// AppDataDir returns (and creates) the platform-specific app data directory.
+func AppDataDir() (string, error) {
 	var base string
 	switch runtime.GOOS {
 	case "windows":
@@ -57,10 +44,10 @@ func appDataDir() (string, error) {
 	return dir, nil
 }
 
-// mediaDir returns (and creates) the per-video media cache directory at
-// %APPDATA%\LucidPlayer\media\<hash>\
-func mediaDir(hash string) (string, error) {
-	base, err := appDataDir()
+// MediaDir returns (and creates) the per-video media cache directory at
+// <AppDataDir>/media/<hash>/.
+func MediaDir(hash string) (string, error) {
+	base, err := AppDataDir()
 	if err != nil {
 		return "", err
 	}

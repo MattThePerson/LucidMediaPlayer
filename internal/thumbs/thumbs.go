@@ -1,6 +1,4 @@
-//go:build windows
-
-package main
+package thumbs
 
 import (
 	"bytes"
@@ -14,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"syscall"
 )
 
 const (
@@ -35,8 +32,12 @@ var thumbsInProgress sync.Map
 
 // ffmpegPath returns the path to ffmpeg, preferring a copy next to the executable.
 func ffmpegPath() (string, error) {
+	name := "ffmpeg"
+	if runtime.GOOS == "windows" {
+		name = "ffmpeg.exe"
+	}
 	if exe, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(exe), "ffmpeg.exe")
+		candidate := filepath.Join(filepath.Dir(exe), name)
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate, nil
 		}
@@ -49,7 +50,6 @@ func ffmpegPath() (string, error) {
 }
 
 // extractFrame extracts one JPEG frame at time t (seconds) using fast-seek (-ss before -i).
-// Output is piped to stdout so no temp files are written to disk.
 func extractFrame(ffmpegBin, videoPath string, t float64, w, h int) (image.Image, error) {
 	filter := fmt.Sprintf(
 		"scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2",
@@ -65,7 +65,7 @@ func extractFrame(ffmpegBin, videoPath string, t float64, w, h int) (image.Image
 		"-q:v", "5",
 		"pipe:1",
 	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	hideSubprocess(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -112,22 +112,17 @@ func formatVTTTime(s float64) string {
 	return fmt.Sprintf("%02d:%02d:%06.3f", h, m, sec)
 }
 
-// tlog calls logFn if non-nil.
 func tlog(logFn func(string), msg string) {
 	if logFn != nil {
 		logFn(msg)
 	}
 }
 
-// generateThumbnails extracts thumbCount frames with a parallel worker pool,
+// GenerateThumbnails extracts thumbCount frames with a parallel worker pool,
 // assembles them into a spritesheet, and writes spritesheet.jpg + spritesheet.vtt
-// to media/<hash>/. Returns (true, nil) if skipped (cache hit or concurrent guard),
+// to dir. Returns (true, nil) if skipped (cache hit or concurrent guard),
 // (false, nil) on successful fresh generation, or (false, err) on failure.
-func generateThumbnails(videoPath, hash string, duration float64, logFn func(string)) (bool, error) {
-	dir, err := mediaDir(hash)
-	if err != nil {
-		return false, fmt.Errorf("mediaDir: %w", err)
-	}
+func GenerateThumbnails(dir, videoPath string, duration float64, logFn func(string)) (bool, error) {
 	ssPath := filepath.Join(dir, "spritesheet.jpg")
 	vttPath := filepath.Join(dir, "spritesheet.vtt")
 
@@ -139,12 +134,12 @@ func generateThumbnails(videoPath, hash string, duration float64, logFn func(str
 		}
 	}
 
-	// Prevent duplicate concurrent generation for the same video hash.
-	if _, loaded := thumbsInProgress.LoadOrStore(hash, struct{}{}); loaded {
+	// Prevent duplicate concurrent generation for the same directory.
+	if _, loaded := thumbsInProgress.LoadOrStore(dir, struct{}{}); loaded {
 		tlog(logFn, "generation already in progress, skipping")
 		return true, nil
 	}
-	defer thumbsInProgress.Delete(hash)
+	defer thumbsInProgress.Delete(dir)
 
 	ffmpeg, err := ffmpegPath()
 	if err != nil {
@@ -159,7 +154,6 @@ func generateThumbnails(videoPath, hash string, duration float64, logFn func(str
 	cols := int(math.Ceil(math.Sqrt(float64(thumbCount))))
 	tlog(logFn, fmt.Sprintf("extracting %d frames (%d×%d grid, %d×%dpx)", thumbCount, cols, cols, thumbW, thumbHeight))
 
-	// Sample points offset by 0.5 so we never land exactly on t=0 (likely a black frame).
 	timestamps := make([]float64, thumbCount)
 	for i := range timestamps {
 		timestamps[i] = (float64(i) + 0.5) * duration / float64(thumbCount)
@@ -182,7 +176,7 @@ func generateThumbnails(videoPath, hash string, duration float64, logFn func(str
 			for idx := range jobs {
 				img, err := extractFrame(ffmpeg, videoPath, timestamps[idx], thumbW, thumbHeight)
 				if err == nil {
-					frames[idx] = img // safe: each goroutine writes a unique index
+					frames[idx] = img
 				}
 			}
 		}()

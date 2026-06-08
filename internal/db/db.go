@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"crypto/sha256"
@@ -22,12 +22,15 @@ type VideoRecord struct {
 	LastPos  float64
 }
 
-func initDB() error {
-	dir, err := appDataDir()
-	if err != nil {
-		return fmt.Errorf("appDataDir: %w", err)
-	}
-	dbPath := filepath.Join(dir, "db.sqlite")
+// RecentEntry is one item in the recently-opened list.
+type RecentEntry struct {
+	Path     string `json:"path"`
+	Filename string `json:"filename"`
+	OpenedAt string `json:"openedAt"`
+}
+
+// InitDB opens (and creates if needed) the SQLite database at dbPath.
+func InitDB(dbPath string) error {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return fmt.Errorf("open sqlite: %w", err)
@@ -53,9 +56,9 @@ func initDB() error {
 	return nil
 }
 
-// dbUpsertFilepath upserts a filepath record (updating last_opened) and returns
+// UpsertFilepath upserts a filepath record (updating last_opened) and returns
 // the full record including any existing hash and last_pos.
-func dbUpsertFilepath(path, openedAt string) (*VideoRecord, error) {
+func UpsertFilepath(path, openedAt string) (*VideoRecord, error) {
 	if gDB == nil {
 		return nil, fmt.Errorf("db not initialised")
 	}
@@ -80,7 +83,8 @@ func dbUpsertFilepath(path, openedAt string) (*VideoRecord, error) {
 	return &r, tx.Commit()
 }
 
-func dbGetByHash(hash string) (*VideoRecord, error) {
+// GetByHash looks up a record by file hash.
+func GetByHash(hash string) (*VideoRecord, error) {
 	if gDB == nil {
 		return nil, fmt.Errorf("db not initialised")
 	}
@@ -94,7 +98,8 @@ func dbGetByHash(hash string) (*VideoRecord, error) {
 	return &r, nil
 }
 
-func dbSetHash(id int64, hash string) error {
+// SetHash writes a hash onto an existing filepath row.
+func SetHash(id int64, hash string) error {
 	if gDB == nil {
 		return nil
 	}
@@ -102,9 +107,9 @@ func dbSetHash(id int64, hash string) error {
 	return err
 }
 
-// dbMergeHashRecord updates the hash record's filepath/last_opened and deletes
+// MergeHashRecord updates the hash record's filepath/last_opened and deletes
 // the stale filepath-only record. Used when a renamed file is re-opened.
-func dbMergeHashRecord(hashID, filepathID int64, newFilepath, openedAt string) error {
+func MergeHashRecord(hashID, filepathID int64, newFilepath, openedAt string) error {
 	if gDB == nil {
 		return nil
 	}
@@ -127,7 +132,8 @@ func dbMergeHashRecord(hashID, filepathID int64, newFilepath, openedAt string) e
 	return tx.Commit()
 }
 
-func dbSavePosition(id int64, pos float64) error {
+// SavePosition saves the playback position for a video record.
+func SavePosition(id int64, pos float64) error {
 	if gDB == nil {
 		return nil
 	}
@@ -135,7 +141,8 @@ func dbSavePosition(id int64, pos float64) error {
 	return err
 }
 
-func dbGetRecents(limit int) ([]RecentEntry, error) {
+// GetRecents returns up to limit recently-opened entries ordered by last_opened DESC.
+func GetRecents(limit int) ([]RecentEntry, error) {
 	if gDB == nil {
 		return []RecentEntry{}, nil
 	}
@@ -164,9 +171,9 @@ func dbGetRecents(limit int) ([]RecentEntry, error) {
 	return entries, nil
 }
 
-// dbClearRecents nullifies last_opened for all records so they disappear from
+// ClearRecents nullifies last_opened for all records so they disappear from
 // the recents list while preserving hash and position data.
-func dbClearRecents() error {
+func ClearRecents() error {
 	if gDB == nil {
 		return nil
 	}
@@ -174,9 +181,9 @@ func dbClearRecents() error {
 	return err
 }
 
-// hashVideoFile reads 3×64 KB chunks (start, middle, end) and returns their
+// HashVideoFile reads 3×64 KB chunks (start, middle, end) and returns their
 // SHA-256 as a hex string. Survives renames; typically sub-millisecond.
-func hashVideoFile(path string) (string, error) {
+func HashVideoFile(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err

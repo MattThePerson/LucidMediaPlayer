@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"lucidplayer/internal/storage"
 )
 
 // Preferences holds user-configurable settings persisted to
@@ -15,7 +17,7 @@ type Preferences struct {
 }
 
 func configDir() (string, error) {
-	base, err := appDataDir()
+	base, err := storage.AppDataDir()
 	if err != nil {
 		return "", err
 	}
