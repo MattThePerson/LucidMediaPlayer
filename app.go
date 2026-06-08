@@ -5,9 +5,11 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -328,6 +330,7 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 		if savedPos > 0 {
 			go restorePosition(tab, savedPos)
 		}
+		go a.ensureThumbnails(tabID, tab, filePath, tab.hash)
 	} else {
 		// Unknown file or DB unavailable: hash in background.
 		go a.hashAndLookup(tabID, filePath)
@@ -392,6 +395,8 @@ func (a *App) hashAndLookup(tabID, filePath string) {
 			}
 		}
 	}
+
+	go a.ensureThumbnails(tabID, tab, filePath, hash)
 }
 
 // shortHash returns the first 8 chars of a hash (for debug output), or "" if empty.
@@ -400,6 +405,76 @@ func shortHash(h string) string {
 		return h[:8]
 	}
 	return h
+}
+
+// ensureThumbnails waits for mpv to report video duration, then generates seek
+// thumbnails in the background if not already cached. Runs as a goroutine.
+func (a *App) ensureThumbnails(tabID string, tab *TabInstance, videoPath, hash string) {
+	// Poll for duration — mpv reports it via IPC within ~1s of opening the file.
+	var duration float64
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		tab.stateMu.RLock()
+		duration = tab.duration
+		tab.stateMu.RUnlock()
+		if duration > 0 {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if duration <= 0 {
+		a.emitDebug("thumbs", "duration unavailable, skipping thumbnail generation")
+		return
+	}
+
+	a.emitDebug("thumbs", fmt.Sprintf("generating thumbnails for %s (%.0fs)", filepath.Base(videoPath), duration))
+	start := time.Now()
+
+	if err := generateThumbnails(videoPath, hash, duration); err != nil {
+		a.emitDebug("thumbs", "generation error: "+err.Error())
+		return
+	}
+
+	elapsed := time.Since(start)
+	a.emitDebug("thumbs", fmt.Sprintf("thumbnails ready in %.1fs", elapsed.Seconds()))
+	runtime.EventsEmit(a.ctx, "seek-thumbs-ready", tabID)
+}
+
+// GetSeekThumbnailData returns the VTT text and base64-encoded spritesheet for
+// the given tab. Returns Ready=false if thumbnails are not yet generated or the
+// tab's hash is not yet known.
+func (a *App) GetSeekThumbnailData(tabID string) SeekThumbnailData {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return SeekThumbnailData{}
+	}
+
+	tab.stateMu.RLock()
+	hash := tab.hash
+	tab.stateMu.RUnlock()
+	if hash == "" {
+		return SeekThumbnailData{}
+	}
+
+	dir, err := mediaDir(hash)
+	if err != nil {
+		return SeekThumbnailData{}
+	}
+	vttBytes, err := os.ReadFile(filepath.Join(dir, "spritesheet.vtt"))
+	if err != nil {
+		return SeekThumbnailData{}
+	}
+	ssBytes, err := os.ReadFile(filepath.Join(dir, "spritesheet.jpg"))
+	if err != nil {
+		return SeekThumbnailData{}
+	}
+	return SeekThumbnailData{
+		VTT:               string(vttBytes),
+		SpritesheetBase64: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(ssBytes),
+		Ready:             true,
+	}
 }
 
 // GetChangelog returns the embedded CHANGELOG.md content.

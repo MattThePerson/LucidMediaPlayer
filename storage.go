@@ -56,3 +56,14 @@ func appDataDir() (string, error) {
 	}
 	return dir, nil
 }
+
+// mediaDir returns (and creates) the per-video media cache directory at
+// %APPDATA%\LucidPlayer\media\<hash>\
+func mediaDir(hash string) (string, error) {
+	base, err := appDataDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, "media", hash)
+	return dir, os.MkdirAll(dir, 0o755)
+}

@@ -1,16 +1,14 @@
 export class PassionPlayer {
-
     constructor({
         player_id = null,
         hostEl = null,
         src = null,
         poster = null,
         title = null,
-        seek_thumbs_vtt_src = null,
         subtitles_srt_src = null,
         autoplay = true,
         mute = false,
-        preload = 'auto',
+        preload = "auto",
         markers_get = null,
         markers_post = null,
         keybind_override_elements = null,
@@ -20,7 +18,7 @@ export class PassionPlayer {
         // headless mode callbacks (used when src is not provided)
         onPlay = null,
         onPause = null,
-        onSeek = null,       // (fraction: 0–1) => void
+        onSeek = null, // (fraction: 0–1) => void
         onFullscreen = null, // () => void — override native fullscreen
         onVolumeChange = null, // (volume: 0–100) => void
     }) {
@@ -28,7 +26,6 @@ export class PassionPlayer {
         this.src = src;
         this.poster = poster;
         this.title = title;
-        this.seek_thumbs_vtt_src = seek_thumbs_vtt_src;
         this.subtitles_srt_src = subtitles_srt_src;
         this.autoplay = autoplay;
         this.mute = mute;
@@ -49,7 +46,7 @@ export class PassionPlayer {
         this.shadow = null;
         this.video = null; // null in headless mode
 
-        // headless mode state
+        /* headless mode state */
         this._paused = true;
         this._currentTime = 0;
         this._duration = 0;
@@ -64,55 +61,59 @@ export class PassionPlayer {
         this._hostEl = hostEl;
         this._destroyed = false;
 
-        this.init();
+        this._init();
     }
 
     // ====================================================================================================
     // Init
     // ====================================================================================================
 
-    async init() {
-        this.root_element = this._hostEl ?? document.getElementById(this.player_id);
+    async _init() {
+        this.root_element =
+            this._hostEl ?? document.getElementById(this.player_id);
         if (!this.root_element) {
-            throw new Error(`Cannot inject Passion Player, no element with id: ${this.player_id}`);
+            throw new Error(
+                `Cannot inject Passion Player, no element with id: ${this.player_id}`,
+            );
         }
         // Reuse an existing shadow root if present (React Strict Mode fires effects twice
         // on the same element; attachShadow throws on a second call).
-        this.shadow = this.root_element.shadowRoot ?? this.root_element.attachShadow({ mode: 'open' });
-        this.shadow.innerHTML = '';
+        this.shadow =
+            this.root_element.shadowRoot ??
+            this.root_element.attachShadow({ mode: "open" });
+        this.shadow.innerHTML = "";
 
-        await this.addStyles(this.shadow, this.dev_styles_path);
+        await this._addStyles(this.shadow, this.dev_styles_path);
         if (this._destroyed) return; // React Strict Mode called destroy() during the async gap
-        this.addHTML(this.shadow);
+        this._addHTML(this.shadow);
 
         if (this.src) {
-            await new Promise(resolve => {
-                this.shadow.querySelector('video').addEventListener('loadeddata', resolve, { once: true });
+            await new Promise((resolve) => {
+                this.shadow
+                    .querySelector("video")
+                    .addEventListener("loadeddata", resolve, { once: true });
             });
-            this.video = this.shadow.querySelector('video');
-            this.log('video loaded');
+            this.video = this.shadow.querySelector("video");
+            this.log("video loaded");
         }
 
-        this.hydrate();
+        this._hydrate();
         if (!this.disable_keybinds) {
             this.addKeybinds(this.keybind_override_elements);
         }
-        this.addEventListeners();
+        this._initEventListeners();
 
-        if (this.seek_thumbs_vtt_src) {
-            this.loadSeekThumbnails(this.seek_thumbs_vtt_src);
-        }
     }
 
-    addHTML(shadow) {
-        const player = document.createElement('div');
-        player.className = 'PassionPlayer';
+    _addHTML(shadow) {
+        const player = document.createElement("div");
+        player.className = "PassionPlayer";
         player.innerHTML = this.getHTML();
         shadow.appendChild(player);
     }
 
-    async addStyles(shadow, styles_path) {
-        let css = this.getStyles();
+    async _addStyles(shadow, styles_path) {
+        let css = this._getStyles();
         if (styles_path) {
             const response = await fetch(styles_path);
             if (response.status !== 200) {
@@ -120,7 +121,7 @@ export class PassionPlayer {
             }
             css = await response.text();
         }
-        const style = document.createElement('style');
+        const style = document.createElement("style");
         style.textContent = css;
         shadow.appendChild(style);
     }
@@ -128,10 +129,10 @@ export class PassionPlayer {
     destroy() {
         this._destroyed = true;
         if (this._keydownHandler) {
-            document.removeEventListener('keydown', this._keydownHandler);
+            document.removeEventListener("keydown", this._keydownHandler);
         }
         if (this.shadow) {
-            this.shadow.innerHTML = '';
+            this.shadow.innerHTML = "";
         }
     }
 
@@ -139,48 +140,48 @@ export class PassionPlayer {
     // Handlers
     // ====================================================================================================
 
-    hydrate() {
+    _hydrate() {
         if (this.video) {
-            const el = this.$('.time-duration-container .duration');
-            if (el) el.textContent = this.format_time(this.video.duration);
+            const el = this.$(".time-duration-container .duration");
+            if (el) el.textContent = this._formatTime(this.video.duration);
         }
         this.updatePlayBtn();
     }
 
-    addEventListeners() {
-        this.addVideoClickEventListeners();
-        this.addDefaultProgressBarEventListeners();
-        this.addPlayBtnEventListeners();
-        this.addVolumeEventListeners();
-        this.addFullscreenBtnEventListeners();
+    _initEventListeners() {
+        this._addVideoClickEventListeners();
+        this._addDefaultProgressBarEventListeners();
+        this._addPlayBtnEventListeners();
+        this._addVolumeEventListeners();
+        this._addFullscreenBtnEventListeners();
     }
 
-    addPlayBtnEventListeners() {
-        const btn = this.$('.pp-play-btn');
+    _addPlayBtnEventListeners() {
+        const btn = this.$(".pp-play-btn");
         if (!btn) return;
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener("click", (e) => {
             e.stopPropagation();
-            this.toggle_playback();
+            this.togglePlayback();
         });
         if (this.video) {
-            this.video.addEventListener('play',  () => this.updatePlayBtn());
-            this.video.addEventListener('pause', () => this.updatePlayBtn());
+            this.video.addEventListener("play", () => this.updatePlayBtn());
+            this.video.addEventListener("pause", () => this.updatePlayBtn());
         }
     }
 
-    addFullscreenBtnEventListeners() {
-        const btn = this.$('.pp-fullscreen-btn');
+    _addFullscreenBtnEventListeners() {
+        const btn = this.$(".pp-fullscreen-btn");
         if (!btn) return;
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener("click", (e) => {
             e.stopPropagation();
-            this.toggle_fullscreen();
+            this.toggleFullscreen();
         });
     }
 
-    addVolumeEventListeners() {
-        const slider = this.$('.pp-volume-slider');
+    _addVolumeEventListeners() {
+        const slider = this.$(".pp-volume-slider");
         if (!slider) return;
-        slider.addEventListener('input', (e) => {
+        slider.addEventListener("input", (e) => {
             e.stopPropagation();
             const vol = Number(e.target.value);
             this._volume = vol;
@@ -188,66 +189,72 @@ export class PassionPlayer {
             this.updateVolumeIcon(vol);
         });
         // prevent clicks on the slider from bubbling to the player click handler
-        slider.addEventListener('click', (e) => e.stopPropagation());
-        slider.addEventListener('mousedown', (e) => e.stopPropagation());
+        slider.addEventListener("click", (e) => e.stopPropagation());
+        slider.addEventListener("mousedown", (e) => e.stopPropagation());
     }
 
-    addVideoClickEventListeners() {
+    _addVideoClickEventListeners() {
         let pb_flag = false;
         let fs_flag = false;
         let pb_timer = null;
 
         // In headless mode attach to the player div; in HTML5 mode attach to the video element
-        const clickTarget = this.video ?? this.$('.PassionPlayer');
+        const clickTarget = this.video ?? this.$(".PassionPlayer");
 
-        clickTarget.addEventListener('click', (e) => {
+        clickTarget.addEventListener("click", (e) => {
             // In headless mode, don't capture clicks on the control elements
-            if (!this.video && e.target.closest('.controls-bar')) return;
+            if (!this.video && e.target.closest(".controls-bar")) return;
 
             if (pb_flag === false && fs_flag === false) {
                 pb_flag = true;
                 fs_flag = true;
                 pb_timer = setTimeout(() => {
                     if (pb_flag) {
-                        this.toggle_playback();
+                        this.togglePlayback();
                         pb_flag = false;
                     }
                 }, 175);
-                setTimeout(() => { fs_flag = false; }, 350);
-
+                setTimeout(() => {
+                    fs_flag = false;
+                }, 350);
             } else if (fs_flag) {
                 // Double-click: cancel the pending single-click toggle and go fullscreen
                 clearTimeout(pb_timer);
                 pb_timer = null;
-                this.$$('.pp-icon').forEach(el => { el.style.display = 'none'; });
-                this.toggle_fullscreen();
+                this.$$(".pp-icon").forEach((el) => {
+                    el.style.display = "none";
+                });
+                this.toggleFullscreen();
                 pb_flag = false;
                 fs_flag = false;
             }
         });
     }
 
-    addDefaultProgressBarEventListeners() {
-        const progress_bar_container = this.$('#progress-bar-default');
-        const progress_bar = progress_bar_container.querySelector('.progress-bar');
+    _addDefaultProgressBarEventListeners() {
+        const progress_bar_container = this.$("#progress-bar-default");
+        const progress_bar =
+            progress_bar_container.querySelector(".progress-bar");
 
         if (this.video) {
-            this.video.addEventListener('timeupdate', () => {
-                const perc = this.video.currentTime / this.video.duration * 100;
-                progress_bar.style.width = perc + '%';
-                const cur = this.$('.time-duration-container .current');
-                if (cur) cur.textContent = this.format_time(this.video.currentTime);
+            this.video.addEventListener("timeupdate", () => {
+                const perc =
+                    (this.video.currentTime / this.video.duration) * 100;
+                progress_bar.style.width = perc + "%";
+                const cur = this.$(".time-duration-container .current");
+                if (cur)
+                    cur.textContent = this._formatTime(this.video.currentTime);
             });
         }
 
-        progress_bar_container.addEventListener('mouseenter', () => {
-            progress_bar_container.style.height = '38px';
+        progress_bar_container.addEventListener("mouseenter", () => {
+            progress_bar_container.style.height = "38px";
         });
-        progress_bar_container.addEventListener('mouseleave', () => {
-            progress_bar_container.style.height = '12px';
+        progress_bar_container.addEventListener("mouseleave", () => {
+            progress_bar_container.style.height = "12px";
         });
 
-        progress_bar_container.addEventListener('click', (e) => {
+        progress_bar_container.addEventListener("click", (e) => {
             e.stopPropagation();
             const rect = progress_bar_container.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -255,12 +262,14 @@ export class PassionPlayer {
             this.setPlaybackTime(perc, progress_bar);
         });
 
-        progress_bar_container.addEventListener('mousemove', (e) => {
+        progress_bar_container.addEventListener("mousemove", (e) => {
             const rect = progress_bar_container.getBoundingClientRect();
             const perc = ((e.clientX - rect.left) / rect.width) * 100;
-            this.updateSeekThumbnail(e.clientX, perc);
+            this._updateSeekThumbnail(e.clientX, perc);
         });
-        progress_bar_container.addEventListener('mouseleave', () => this.hideSeekThumbnail());
+        progress_bar_container.addEventListener("mouseleave", () =>
+            this._hideSeekThumbnail(),
+        );
     }
 
     // ====================================================================================================
@@ -268,16 +277,18 @@ export class PassionPlayer {
     // ====================================================================================================
 
     getHTML() {
-        const videoEl = this.src ? `
+        const videoEl = this.src
+            ? `
             <video
                 src="${this.src}"
                 loop
                 muted
                 preload="metadata"
             ></video>
-        ` : '';
+        `
+            : "";
 
-        return /* html */`
+        return /* html */ `
             ${videoEl}
 
             <!-- progress bar (seek) -->
@@ -332,28 +343,34 @@ export class PassionPlayer {
 
     addKeybinds(keybind_override_elements) {
         const jump_medium = 10;
-        const progress_bar = this.$('#progress-bar-default .progress-bar');
+        const progress_bar = this.$("#progress-bar-default .progress-bar");
 
         this._keydownHandler = (e) => {
-            const ignore_keydown = document.activeElement.tagName === 'INPUT';
+            const ignore_keydown = document.activeElement.tagName === "INPUT";
             if (ignore_keydown) return;
 
             this.log(this.video?.currentTime);
 
-            const key = e.shiftKey ? 'sh-' + e.code : e.code;
+            const key = e.shiftKey ? "sh-" + e.code : e.code;
             switch (key) {
                 case "Space":
                     e.preventDefault();
-                    this.toggle_playback();
+                    this.togglePlayback();
                     break;
                 case "KeyF":
-                    this.toggle_fullscreen();
+                    this.toggleFullscreen();
                     break;
                 case "KeyD": {
                     if (this.video) {
-                        this.setPlaybackTime(this.video.currentTime + jump_medium, progress_bar);
+                        this.setPlaybackTime(
+                            this.video.currentTime + jump_medium,
+                            progress_bar,
+                        );
                     } else if (this._duration > 0) {
-                        this.setPlaybackTime((this._currentTime + jump_medium) / this._duration, progress_bar);
+                        this.setPlaybackTime(
+                            (this._currentTime + jump_medium) / this._duration,
+                            progress_bar,
+                        );
                     }
                     break;
                 }
@@ -366,90 +383,101 @@ export class PassionPlayer {
             }
         };
 
-        document.addEventListener('keydown', this._keydownHandler);
+        document.addEventListener("keydown", this._keydownHandler);
     }
 
     // ====================================================================================================
     // Seek Thumbs
     // ====================================================================================================
 
-    updateSeekThumbnail(mouse_x, video_perc) {
+    _updateSeekThumbnail(mouse_x, video_perc) {
         if (this.seekThumbsContainer) {
             const cont = this.seekThumbsContainer;
-            cont.style.display = '';
+            cont.style.display = "";
 
             const cont_wid = parseInt(getComputedStyle(cont).width);
             let x_translate = mouse_x - cont_wid / 2;
             const padding = 8;
             x_translate = Math.max(x_translate, padding);
             const window_wid = document.documentElement.clientWidth;
-            x_translate = Math.min(x_translate, window_wid - cont_wid - padding);
-            cont.style.left = x_translate + 'px';
+            x_translate = Math.min(
+                x_translate,
+                window_wid - cont_wid - padding,
+            );
+            cont.style.left = x_translate + "px";
 
-            const holder = cont.querySelector('.seek-thumbnail');
-            const scaleFactor = parseInt(getComputedStyle(holder).height) / this.seekThumbsSprites[0].h;
+            const holder = cont.querySelector(".seek-thumbnail");
+            const scaleFactor =
+                parseInt(getComputedStyle(holder).height) /
+                this.seekThumbsSprites[0].h;
             holder.style.backgroundSize =
-                (this.seekThumbsSpritesheetSize.w * scaleFactor) + 'px ' +
-                (this.seekThumbsSpritesheetSize.h * scaleFactor) + 'px';
+                this.seekThumbsSpritesheetSize.w * scaleFactor +
+                "px " +
+                this.seekThumbsSpritesheetSize.h * scaleFactor +
+                "px";
 
-            const thumbIndex = Math.floor(video_perc / 100 * this.seekThumbsSprites.length);
+            const thumbIndex = Math.floor(
+                (video_perc / 100) * this.seekThumbsSprites.length,
+            );
             const sprite = this.seekThumbsSprites[thumbIndex];
-            holder.style.backgroundPosition =
-                `-${sprite.x * scaleFactor}px -${sprite.y * scaleFactor}px`;
+            holder.style.backgroundPosition = `-${sprite.x * scaleFactor}px -${sprite.y * scaleFactor}px`;
 
             const duration = this.video ? this.video.duration : this._duration;
-            const timeEl = this.$('#seek-thumbs-container .time');
-            if (timeEl) timeEl.textContent = this.format_time(duration * video_perc / 100);
+            const timeEl = this.$("#seek-thumbs-container .time");
+            if (timeEl)
+                timeEl.textContent = this._formatTime(
+                    (duration * video_perc) / 100,
+                );
         }
     }
 
-    hideSeekThumbnail() {
+    _hideSeekThumbnail() {
         if (this.seekThumbsContainer) {
-            this.seekThumbsContainer.style.display = 'none';
+            this.seekThumbsContainer.style.display = "none";
         }
     }
 
-    async loadSeekThumbnails(vtt_src) {
-        const response = await fetch(vtt_src);
-        if (response.status !== 200) {
-            throw new Error(`Unable to fetch seek thumbnail webvtt from: ${vtt_src}`);
-        }
-        const vtt = await response.text();
-        const sprites = this.parseVTT(vtt);
+    // setSeekThumbs — data-push variant used by the Wails backend.
+    // vttContent: raw WEBVTT string; spritesheetDataURL: "data:image/jpeg;base64,..."
+    setSeekThumbs(vttContent, spritesheetDataURL) {
+        const sprites = this._parseVTT(vttContent);
+        if (!sprites.length) return;
 
-        const spritesheet_src = vtt_src.replace('.vtt', '.jpg');
+        // Reset any previous thumbnail state before loading new data.
+        this.seekThumbsSprites = null;
+        this.seekThumbsContainer = null;
+        this.seekThumbsSpritesheetSize = null;
+
         const img = new Image();
-        img.src = spritesheet_src;
-        await new Promise(resolve => { img.onload = resolve; });
+        img.onload = () => {
+            const cont = this.shadow?.querySelector('#seek-thumbs-container');
+            if (!cont) return; // player not ready or destroyed
+            const holder = cont.querySelector('.seek-thumbnail');
 
-        this.seekThumbsSpritesheetSize = { w: img.naturalWidth, h: img.naturalHeight };
-
-        this.seekThumbsContainer = this.shadow.querySelector('#seek-thumbs-container');
-        const seekThumbsHolder = this.seekThumbsContainer.querySelector('.seek-thumbnail');
-        seekThumbsHolder.style.backgroundImage = `url("${spritesheet_src}")`;
-        seekThumbsHolder.style.backgroundRepeat = 'no-repeat';
-
-        const thumbAspectRatio = sprites[0].w / sprites[0].h;
-        seekThumbsHolder.style.width = (thumbAspectRatio * seekThumbsHolder.clientHeight) + 'px';
-
-        this.seekThumbsContainer.style.visibility = 'visible';
-        this.seekThumbsContainer.style.display = 'none';
-
-        this.seekThumbsSprites = sprites;
+            this.seekThumbsSpritesheetSize = { w: img.naturalWidth, h: img.naturalHeight };
+            holder.style.backgroundImage = `url("${spritesheetDataURL}")`;
+            holder.style.backgroundRepeat = 'no-repeat';
+            holder.style.width = (sprites[0].w / sprites[0].h * (holder.clientHeight || 200)) + 'px';
+            cont.style.visibility = 'visible';
+            cont.style.display = 'none';
+            this.seekThumbsSprites = sprites;
+            this.seekThumbsContainer = cont;
+        };
+        img.src = spritesheetDataURL;
     }
 
-    parseVTT(vttText) {
+    _parseVTT(vttText) {
         const sprites = [];
-        const lines = vttText.split('\n');
+        const lines = vttText.split("\n");
         for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('xywh=')) {
-                const coords = lines[i].split('xywh=')[1].split(',');
+            if (lines[i].includes("xywh=")) {
+                const coords = lines[i].split("xywh=")[1].split(",");
                 if (coords.length === 4) {
                     sprites.push({
                         x: parseInt(coords[0]),
                         y: parseInt(coords[1]),
                         w: parseInt(coords[2]),
-                        h: parseInt(coords[3])
+                        h: parseInt(coords[3]),
                     });
                 }
             }
@@ -472,21 +500,23 @@ export class PassionPlayer {
         if (!this.shadow) return;
 
         if (this._duration > 0) {
-            const perc = this._currentTime / this._duration * 100;
-            const progressBar = this.$('#progress-bar-default .progress-bar');
-            if (progressBar) progressBar.style.width = perc + '%';
+            const perc = (this._currentTime / this._duration) * 100;
+            const progressBar = this.$("#progress-bar-default .progress-bar");
+            if (progressBar) progressBar.style.width = perc + "%";
         }
 
-        const currentEl = this.$('.time-duration-container .current');
-        if (currentEl) currentEl.textContent = this.format_time(this._currentTime);
+        const currentEl = this.$(".time-duration-container .current");
+        if (currentEl)
+            currentEl.textContent = this._formatTime(this._currentTime);
 
-        const durationEl = this.$('.time-duration-container .duration');
-        if (durationEl) durationEl.textContent = this.format_time(this._duration);
+        const durationEl = this.$(".time-duration-container .duration");
+        if (durationEl)
+            durationEl.textContent = this._formatTime(this._duration);
 
         if (paused !== undefined) this.updatePlayBtn();
 
         if (volume !== undefined) {
-            const slider = this.$('.pp-volume-slider');
+            const slider = this.$(".pp-volume-slider");
             if (slider) slider.value = volume;
             this.updateVolumeIcon(volume);
         }
@@ -496,8 +526,12 @@ export class PassionPlayer {
     // Helpers
     // ====================================================================================================
 
-    $(sel)  { return this.shadow.querySelector(sel); }
-    $$(sel) { return Array.from(this.shadow.querySelectorAll(sel)); }
+    $(sel) {
+        return this.shadow.querySelector(sel);
+    }
+    $$(sel) {
+        return Array.from(this.shadow.querySelectorAll(sel));
+    }
 
     log(msg) {
         if (!this.quiet) console.log(msg);
@@ -512,18 +546,20 @@ export class PassionPlayer {
         progress_bar.style.width = `${perc * 100}%`;
     }
 
-    toggle_playback() {
+    togglePlayback() {
         // Debug: log every invocation with timestamp so we can identify double-calls
-        console.debug(`[PP:toggle_playback] @ ${Date.now()} _paused=${this._paused}`);
+        console.debug(
+            `[PP:togglePlayback] @ ${Date.now()} _paused=${this._paused}`,
+        );
         if (this.video) {
             this.video.paused ? this.playVideo() : this.pauseVideo();
         } else {
             if (this._paused) {
                 this.onPlay?.();
-                this.flashPPIndicator('.play-icon');
+                this.flashPPIndicator(".play-icon");
             } else {
                 this.onPause?.();
-                this.flashPPIndicator('.pause-icon');
+                this.flashPPIndicator(".pause-icon");
             }
             this._paused = !this._paused;
             this.updatePlayBtn();
@@ -532,68 +568,70 @@ export class PassionPlayer {
 
     pauseVideo() {
         this.video.pause();
-        this.flashPPIndicator('.pause-icon');
+        this.flashPPIndicator(".pause-icon");
         this.updatePlayBtn();
     }
 
     playVideo() {
         this.video.play();
-        this.flashPPIndicator('.play-icon');
+        this.flashPPIndicator(".play-icon");
         this.updatePlayBtn();
     }
 
     updatePlayBtn() {
-        const btn = this.$('.pp-play-btn');
+        const btn = this.$(".pp-play-btn");
         if (!btn) return;
         const paused = this.video ? this.video.paused : this._paused;
-        btn.textContent = paused ? '▶' : '⏸';
+        btn.textContent = paused ? "▶" : "⏸";
     }
 
     updateVolumeIcon(vol) {
-        const icon = this.$('.pp-volume-icon');
+        const icon = this.$(".pp-volume-icon");
         if (!icon) return;
-        if (vol === 0) icon.textContent = '🔇';
-        else if (vol < 50) icon.textContent = '🔉';
-        else icon.textContent = '🔊';
+        if (vol === 0) icon.textContent = "🔇";
+        else if (vol < 50) icon.textContent = "🔉";
+        else icon.textContent = "🔊";
     }
 
     flashPPIndicator(selector) {
-        const play_icon = this.$('.play-icon');
-        const pause_icon = this.$('.pause-icon');
-        play_icon.style.display = 'none';
-        pause_icon.style.display = 'none';
+        const play_icon = this.$(".play-icon");
+        const pause_icon = this.$(".pause-icon");
+        play_icon.style.display = "none";
+        pause_icon.style.display = "none";
         void play_icon.offsetWidth;
         void pause_icon.offsetWidth;
 
         const flash_icon = this.$(selector);
-        flash_icon.style.display = '';
-        flash_icon.classList.add('shown');
-        setTimeout(() => flash_icon.classList.remove('shown'), 1);
+        flash_icon.style.display = "";
+        flash_icon.classList.add("shown");
+        setTimeout(() => flash_icon.classList.remove("shown"), 1);
     }
 
-    toggle_fullscreen() {
+    toggleFullscreen() {
         if (this.onFullscreen) {
             this.onFullscreen();
             return;
         }
-        const container = this.video ? this.video.parentElement : this.root_element;
+        const container = this.video
+            ? this.video.parentElement
+            : this.root_element;
         if (!document.fullscreenElement) {
-            container.requestFullscreen().catch(err => console.error(err));
+            container.requestFullscreen().catch((err) => console.error(err));
         } else {
             document.exitFullscreen();
         }
     }
 
-    format_time(seconds_float) {
-        if (!seconds_float || isNaN(seconds_float)) return '00:00';
+    _formatTime(seconds_float) {
+        if (!seconds_float || isNaN(seconds_float)) return "00:00";
 
         const hours = Math.floor(seconds_float / 3600);
         const minutes = Math.floor((seconds_float - hours * 3600) / 60);
         const seconds = Math.floor(seconds_float - hours * 3600 - minutes * 60);
 
-        const pad = n => n.toString().padStart(2, '0');
-        let fmt = pad(minutes) + ':' + pad(seconds);
-        if (hours > 0) fmt = pad(hours) + ':' + fmt;
+        const pad = (n) => n.toString().padStart(2, "0");
+        let fmt = pad(minutes) + ":" + pad(seconds);
+        if (hours > 0) fmt = pad(hours) + ":" + fmt;
         return fmt;
     }
 
@@ -601,8 +639,8 @@ export class PassionPlayer {
     // CSS
     // ====================================================================================================
 
-    getStyles() {
-        return /* css */`
+    _getStyles() {
+        return /* css */ `
 
 .PassionPlayer {
     height: 100%;

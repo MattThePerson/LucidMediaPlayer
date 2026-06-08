@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { PassionPlayer } from '../passion_player/PassionPlayer.js';
 import { debugLog } from '../debug';
 
-export default function PassionPlayerWrapper({ info, onTogglePlayback, onSeek, onFullscreen, onVolumeChange }) {
+export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlayback, onSeek, onFullscreen, onVolumeChange }) {
     const hostRef = useRef(null);
     const playerRef = useRef(null);
 
@@ -45,6 +45,11 @@ export default function PassionPlayerWrapper({ info, onTogglePlayback, onSeek, o
             volume:      info.volume,
         });
     }, [info]);
+
+    useEffect(() => {
+        if (!playerRef.current || !seekThumbs) return;
+        playerRef.current.setSeekThumbs(seekThumbs.vtt, seekThumbs.spritesheetBase64);
+    }, [seekThumbs]);
 
     return <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />;
 }

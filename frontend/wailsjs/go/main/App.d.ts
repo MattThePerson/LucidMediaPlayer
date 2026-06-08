@@ -16,6 +16,8 @@ export function GetPlaybackInfo(arg1:string):Promise<main.PlaybackInfo>;
 
 export function GetRecentFiles():Promise<Array<main.RecentEntry>>;
 
+export function GetSeekThumbnailData(arg1:string):Promise<main.SeekThumbnailData>;
+
 export function GetVersion():Promise<string>;
 
 export function OpenFilePicker():Promise<string>;

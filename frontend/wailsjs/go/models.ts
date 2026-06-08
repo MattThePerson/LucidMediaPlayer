@@ -34,6 +34,22 @@ export namespace main {
 	        this.openedAt = source["openedAt"];
 	    }
 	}
+	export class SeekThumbnailData {
+	    vtt: string;
+	    spritesheetBase64: string;
+	    ready: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SeekThumbnailData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.vtt = source["vtt"];
+	        this.spritesheetBase64 = source["spritesheetBase64"];
+	        this.ready = source["ready"];
+	    }
+	}
 
 }
 

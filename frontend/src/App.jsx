@@ -3,7 +3,7 @@ import {
     OpenVideo, OpenFilePicker, SwitchTab, CloseTab,
     TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
     ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
-    ResizeVideo, SetVolume,
+    ResizeVideo, SetVolume, GetSeekThumbnailData,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
@@ -25,6 +25,7 @@ function App() {
     const [version, setVersion] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [recentFiles, setRecentFiles] = useState([]);
+    const [seekThumbs, setSeekThumbs] = useState(null);
 
     // Stack of recently closed tabs for Ctrl+Shift+T reopen
     const closedTabsRef = useRef([]);
@@ -95,6 +96,27 @@ function App() {
             GetPlaybackInfo(activeTabId).then(setInfo).catch(() => {});
         }, 500);
         return () => clearInterval(id);
+    }, [activeTabId, activeTab?.type]);
+
+    // Load seek thumbnails on tab switch, and listen for generation-complete events.
+    useEffect(() => {
+        if (!activeTabId || activeTab?.type !== 'video') {
+            setSeekThumbs(null);
+            return;
+        }
+        // Immediate check: thumbnails may already be cached from a previous visit.
+        GetSeekThumbnailData(activeTabId).then(d => {
+            setSeekThumbs(d?.ready ? { vtt: d.vtt, spritesheetBase64: d.spritesheetBase64 } : null);
+        }).catch(() => setSeekThumbs(null));
+
+        // Listen for the event Go emits when background generation finishes.
+        const off = EventsOn('seek-thumbs-ready', (tabID) => {
+            if (tabID !== activeTabId) return;
+            GetSeekThumbnailData(tabID).then(d => {
+                if (d?.ready) setSeekThumbs({ vtt: d.vtt, spritesheetBase64: d.spritesheetBase64 });
+            }).catch(() => {});
+        });
+        return () => off?.();
     }, [activeTabId, activeTab?.type]);
 
     useEffect(() => {
@@ -319,6 +341,7 @@ function App() {
                 {activeTab?.type === 'video' && (
                     <PassionPlayerWrapper
                         info={info}
+                        seekThumbs={seekThumbs}
                         onTogglePlayback={handleTogglePlayback}
                         onSeek={(pos) => Seek(activeTabId, pos).catch(console.error)}
                         onFullscreen={() => ToggleFullscreen().catch(console.error)}

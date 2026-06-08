@@ -30,6 +30,10 @@ export function GetRecentFiles() {
   return window['go']['main']['App']['GetRecentFiles']();
 }
 
+export function GetSeekThumbnailData(arg1) {
+  return window['go']['main']['App']['GetSeekThumbnailData'](arg1);
+}
+
 export function GetVersion() {
   return window['go']['main']['App']['GetVersion']();
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.12] — 2026-06-08
+- Add: seek thumbnail hover preview — ffmpeg fast-seek generates a 100-frame spritesheet cached per video hash in `%APPDATA%\LucidPlayer\media\<hash>\`
+- Add: `setSeekThumbs(vtt, dataURL)` data-push API on PassionPlayer (replaces URL/fetch path); Go reads and base64-encodes files, no HTTP server needed
+- Add: `GetSeekThumbnailData(tabID)` Wails method; `seek-thumbs-ready` event notifies frontend when generation completes
+
 ## [0.1.11] — 2026-06-08
 - Rename: "Sunset Video Player" → "Lucid Player"; AppData dir `SunsetVideoPlayer` → `LucidPlayer`; exe output `LucidPlayer`
 
