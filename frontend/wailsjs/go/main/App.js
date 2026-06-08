@@ -22,6 +22,10 @@ export function GetChangelog() {
   return window['go']['main']['App']['GetChangelog']();
 }
 
+export function GetMediaFilesInFolder(arg1) {
+  return window['go']['main']['App']['GetMediaFilesInFolder'](arg1);
+}
+
 export function GetPlaybackInfo(arg1) {
   return window['go']['main']['App']['GetPlaybackInfo'](arg1);
 }
@@ -42,8 +46,24 @@ export function GetVersion() {
   return window['go']['main']['App']['GetVersion']();
 }
 
+export function LoadFile(arg1, arg2) {
+  return window['go']['main']['App']['LoadFile'](arg1, arg2);
+}
+
 export function OpenFilePicker() {
   return window['go']['main']['App']['OpenFilePicker']();
+}
+
+export function OpenFilePickerMultiple() {
+  return window['go']['main']['App']['OpenFilePickerMultiple']();
+}
+
+export function OpenFolderPicker() {
+  return window['go']['main']['App']['OpenFolderPicker']();
+}
+
+export function OpenPlaylistVideo(arg1) {
+  return window['go']['main']['App']['OpenPlaylistVideo'](arg1);
 }
 
 export function OpenVideo(arg1) {

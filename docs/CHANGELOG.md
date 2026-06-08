@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.1.20] — 2026-06-08
+- Add: playlist tab type — create via hamburger "New Playlist" or "Open Folder as Playlist…" (Ctrl+K, O)
+- Add: playlist list view — drag to reorder, Del to remove, double-click or Enter to play, Up/Down to select
+- Add: playlist playback — single mpv instance reused across tracks via `loadfile replace`; N/P keys for next/previous
+- Add: shuffle toggle in playlist toolbar; random mode cycles all tracks before repeating
+- Add: auto-advance when video ends (eof-reached IPC observer); position saving works per file via DB upsert on advance
+- Add: multi-file open when a playlist tab is active (Ctrl+O opens multi-select dialog)
+- Add: file/folder drops on a playlist tab add to the list instead of opening new video tabs
+- Add: `OpenPlaylistVideo`, `LoadFile`, `OpenFilePickerMultiple`, `OpenFolderPicker`, `GetMediaFilesInFolder` Go methods
+
+## [0.1.19] — 2026-06-08
+- Fix: playback indicator is now a small pulsing dot (no space taken when not playing — tab text sits at left edge)
+- Add: Ctrl+, opens Settings; renamed "Preferences" → "Settings" throughout
+- Add: keyboard shortcuts in dropdown now styled as key-caps and are more visible
+- Add: "Debug Log" label in dropdown (was "Debug"), shows F3 shortcut
+- Add: "Settings" in dropdown shows Ctrl+, shortcut
+- Add: thumbnail generation spinner moved to right side of tab bar (was floating over video)
+- Add: "Click video to toggle playback" setting (default off); double-click for fullscreen always works regardless
+- Add: scroll wheel on video controls volume (±5 per tick)
+- Add: scroll wheel on progress bar seeks ±1 second per tick
+
+## [0.1.18] — 2026-06-08
+- Fix: known videos no longer jump from position 0 to saved position on open; `--start=<pos>` is now passed directly to mpv so playback begins at the correct position immediately
+
 ## [0.1.17] — 2026-06-08
 - Add: "Open with" now works — file path passed via `os.Args[1]` is opened as a video tab on startup
 - Add: "Open files in existing window" preference — when enabled, "Open with" sends the file to an already-running instance via a named pipe instead of launching a new window

@@ -1,5 +1,11 @@
 function AppIcon({ className }) {
     return (
+        <img className={className} src="/src/assets/images/appicon.png"></img>
+    )
+}
+
+function AppIconSVG({ className }) {
+    return (
         <svg className={className} width="150" height="150" viewBox="0 0 150 150" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="150" height="150" rx="30" fill="#17132c"/>
             <rect width="9" height="10" y="10" x="15" rx="2" fill="#f5f4d3"/>
@@ -27,7 +33,7 @@ export default function HomeScreen({ version, isDragging, onOpenChangelog }) {
     return (
         <div className="home-screen">
             <AppIcon className="home-icon" />
-            <div className="home-title">Lucid Player</div>
+            <div className="home-title">Lucid Media Player</div>
             <div className="home-version" onClick={onOpenChangelog} role="button" tabIndex={0}>
                 Version {version}
             </div>

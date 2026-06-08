@@ -4,9 +4,11 @@ import { Quit } from '../../wailsjs/runtime/runtime';
 export default function TabBar({
     tabs, activeTabId, tabsState,
     onSwitch, onClose,
-    onOpenFile, onOpenDebug, onOpenChangelog, onOpenPreferences, onReorder,
+    onOpenFile, onOpenDebug, onOpenChangelog, onOpenPreferences,
+    onNewPlaylist, onOpenFolderAsPlaylist,
+    onReorder,
     recentFiles, onOpenRecent, onClearRecent,
-    version,
+    version, isWorking,
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [recentOpen, setRecentOpen] = useState(false);
@@ -161,20 +163,23 @@ export default function TabBar({
                         </div>
 
                         <div className="dropdown-separator" />
-                        {menuItem('Debug', onOpenDebug)}
+                        {menuItemWithShortcut('Debug Log', 'F3', onOpenDebug)}
                         <div className="dropdown-item dropdown-item-with-version" onClick={() => { closeMenu(); onOpenChangelog(); }}>
                             Changelog
                             {version && <span className="dropdown-version">{version}</span>}
                         </div>
                         <div className="dropdown-separator" />
-                        {menuItem('Preferences', onOpenPreferences)}
+                        {menuItemWithShortcut('Settings', 'Ctrl+,', onOpenPreferences)}
+                        <div className="dropdown-separator" />
+                        {menuItem('New Playlist', onNewPlaylist)}
+                        {menuItemWithShortcut('Open Folder as Playlist…', 'Ctrl+K, O', onOpenFolderAsPlaylist)}
                         <div className="dropdown-separator" />
                         {menuItem('Quit', () => Quit())}
                     </div>
                 )}
             </div>
 
-            <div className="tabs-list" ref={tabsListRef}>
+            <div className="tabs-list" ref={tabsListRef} style={{ flex: 1 }}>
                 {tabs.map(tab => (
                     <div
                         key={tab.id}
@@ -183,6 +188,7 @@ export default function TabBar({
                             'tab',
                             tab.id === activeTabId ? 'active' : '',
                             tab.type !== 'video' ? 'tab-page' : '',
+                            tab.type === 'playlist' ? 'tab-playlist' : '',
                             tab.id === draggingId ? 'tab-dragging' : '',
                         ].filter(Boolean).join(' ')}
                         draggable
@@ -192,7 +198,7 @@ export default function TabBar({
                         onDragEnd={handleDragEnd}
                         title={tab.title}
                     >
-                        <span className="tab-playing" style={{ visibility: tabsState[tab.id] ? 'visible' : 'hidden' }}>▶</span>
+                        {tabsState[tab.id] && <span className="tab-playing" />}
                         <span className="tab-name">{tab.title}</span>
                         <button className="tab-close" onClick={e => { e.stopPropagation(); onClose(tab.id); }}>
                             ×
@@ -200,6 +206,7 @@ export default function TabBar({
                     </div>
                 ))}
             </div>
+            {isWorking && <div className="tab-bar-working" title="Generating seek thumbnails..." />}
         </div>
     );
 }

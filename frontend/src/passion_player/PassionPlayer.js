@@ -57,6 +57,8 @@ export class PassionPlayer {
         this.seekThumbsSprites = null;
         this.seekThumbsSpritesheetSize = null;
 
+        this._clickToTogglePlayback = false;
+
         this._keydownHandler = null;
         this._hostEl = hostEl;
         this._destroyed = false;
@@ -154,6 +156,7 @@ export class PassionPlayer {
         this._addPlayBtnEventListeners();
         this._addVolumeEventListeners();
         this._addFullscreenBtnEventListeners();
+        this._addScrollEventListeners();
     }
 
     _addPlayBtnEventListeners() {
@@ -210,7 +213,7 @@ export class PassionPlayer {
                 fs_flag = true;
                 pb_timer = setTimeout(() => {
                     if (pb_flag) {
-                        this.togglePlayback();
+                        if (this._clickToTogglePlayback) this.togglePlayback();
                         pb_flag = false;
                     }
                 }, 175);
@@ -218,7 +221,7 @@ export class PassionPlayer {
                     fs_flag = false;
                 }, 350);
             } else if (fs_flag) {
-                // Double-click: cancel the pending single-click toggle and go fullscreen
+                // Double-click: cancel the pending single-click and go fullscreen (always enabled)
                 clearTimeout(pb_timer);
                 pb_timer = null;
                 this.$$(".pp-icon").forEach((el) => {
@@ -262,6 +265,24 @@ export class PassionPlayer {
             this.setPlaybackTime(perc, progress_bar);
         });
 
+        // Scroll on progress bar: seek ±1 second per tick
+        progress_bar_container.addEventListener("wheel", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const delta = e.deltaY > 0 ? -1 : 1; // scroll up = forward
+            let newFrac;
+            if (this.video) {
+                const newTime = Math.max(0, Math.min(this.video.duration, this.video.currentTime + delta));
+                newFrac = newTime / this.video.duration;
+            } else if (this._duration > 0) {
+                const newTime = Math.max(0, Math.min(this._duration, this._currentTime + delta));
+                newFrac = newTime / this._duration;
+            } else {
+                return;
+            }
+            this.setPlaybackTime(newFrac, progress_bar);
+        }, { passive: false });
+
         progress_bar_container.addEventListener("mousemove", (e) => {
             const rect = progress_bar_container.getBoundingClientRect();
             const perc = ((e.clientX - rect.left) / rect.width) * 100;
@@ -270,6 +291,22 @@ export class PassionPlayer {
         progress_bar_container.addEventListener("mouseleave", () =>
             this._hideSeekThumbnail(),
         );
+    }
+
+    _addScrollEventListeners() {
+        const playerDiv = this.$(".PassionPlayer");
+        if (!playerDiv) return;
+        // Scroll anywhere on the video (except progress bar, which stops propagation): change volume ±5
+        playerDiv.addEventListener("wheel", (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -5 : 5; // scroll up = louder
+            const newVol = Math.max(0, Math.min(100, this._volume + delta));
+            this._volume = newVol;
+            this.onVolumeChange?.(newVol);
+            this.updateVolumeIcon(newVol);
+            const slider = this.$(".pp-volume-slider");
+            if (slider) slider.value = newVol;
+        }, { passive: false });
     }
 
     // ====================================================================================================
@@ -520,6 +557,10 @@ export class PassionPlayer {
             if (slider) slider.value = volume;
             this.updateVolumeIcon(volume);
         }
+    }
+
+    setClickToTogglePlayback(enabled) {
+        this._clickToTogglePlayback = enabled;
     }
 
     // ====================================================================================================

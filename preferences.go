@@ -9,8 +9,9 @@ import (
 // Preferences holds user-configurable settings persisted to
 // %APPDATA%\LucidPlayer\config\preferences.json.
 type Preferences struct {
-	AutogenerateSeekThumbs bool `json:"autogenerateSeekThumbs"`
-	OpenInExistingInstance bool `json:"openInExistingInstance"`
+	AutogenerateSeekThumbs  bool `json:"autogenerateSeekThumbs"`
+	OpenInExistingInstance  bool `json:"openInExistingInstance"`
+	ClickToTogglePlayback   bool `json:"clickToTogglePlayback"`
 }
 
 func configDir() (string, error) {

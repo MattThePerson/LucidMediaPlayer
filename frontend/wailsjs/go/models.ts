@@ -21,6 +21,7 @@ export namespace main {
 	export class Preferences {
 	    autogenerateSeekThumbs: boolean;
 	    openInExistingInstance: boolean;
+	    clickToTogglePlayback: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Preferences(source);
@@ -30,6 +31,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.autogenerateSeekThumbs = source["autogenerateSeekThumbs"];
 	        this.openInExistingInstance = source["openInExistingInstance"];
+	        this.clickToTogglePlayback = source["clickToTogglePlayback"];
 	    }
 	}
 	export class RecentEntry {

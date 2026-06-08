@@ -8,7 +8,7 @@ export default function PreferencesPage({ preferences, onSave }) {
     return (
         <div className="preferences-page">
             <div className="preferences-section">
-                <h2>Preferences</h2>
+                <h2>Settings</h2>
                 <label className="preference-row">
                     <input
                         type="checkbox"
@@ -16,6 +16,14 @@ export default function PreferencesPage({ preferences, onSave }) {
                         onChange={handleToggle('autogenerateSeekThumbs')}
                     />
                     Autogenerate seek thumbnails
+                </label>
+                <label className="preference-row">
+                    <input
+                        type="checkbox"
+                        checked={!!preferences?.clickToTogglePlayback}
+                        onChange={handleToggle('clickToTogglePlayback')}
+                    />
+                    Click video to toggle playback
                 </label>
                 <label className="preference-row">
                     <input

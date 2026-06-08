@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { PassionPlayer } from '../passion_player/PassionPlayer.js';
 import { debugLog } from '../debug';
 
-export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlayback, onSeek, onFullscreen, onVolumeChange }) {
+export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlayback, onSeek, onFullscreen, onVolumeChange, clickToTogglePlayback }) {
     const hostRef = useRef(null);
     const playerRef = useRef(null);
 
@@ -50,6 +50,10 @@ export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlaybac
         if (!playerRef.current || !seekThumbs) return;
         playerRef.current.setSeekThumbs(seekThumbs.vtt, seekThumbs.spritesheetBase64);
     }, [seekThumbs]);
+
+    useEffect(() => {
+        playerRef.current?.setClickToTogglePlayback(clickToTogglePlayback ?? false);
+    }, [clickToTogglePlayback]);
 
     return <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />;
 }

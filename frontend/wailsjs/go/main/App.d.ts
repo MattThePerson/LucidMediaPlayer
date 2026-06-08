@@ -12,6 +12,8 @@ export function GetAppDataDir():Promise<string>;
 
 export function GetChangelog():Promise<string>;
 
+export function GetMediaFilesInFolder(arg1:string):Promise<Array<string>>;
+
 export function GetPlaybackInfo(arg1:string):Promise<main.PlaybackInfo>;
 
 export function GetPreferences():Promise<main.Preferences>;
@@ -22,7 +24,15 @@ export function GetSeekThumbnailData(arg1:string):Promise<main.SeekThumbnailData
 
 export function GetVersion():Promise<string>;
 
+export function LoadFile(arg1:string,arg2:string):Promise<void>;
+
 export function OpenFilePicker():Promise<string>;
+
+export function OpenFilePickerMultiple():Promise<Array<string>>;
+
+export function OpenFolderPicker():Promise<string>;
+
+export function OpenPlaylistVideo(arg1:string):Promise<string>;
 
 export function OpenVideo(arg1:string):Promise<string>;
 

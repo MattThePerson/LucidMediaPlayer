@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -64,6 +66,14 @@ const (
 	wmSysCommand = uintptr(0x0112)
 	scKeyMenu    = uintptr(0xF100)
 )
+
+var mediaExtensions = map[string]bool{
+	".mp4": true, ".mkv": true, ".avi": true, ".mov": true,
+	".webm": true, ".flv": true, ".wmv": true, ".m4v": true,
+	".mpg": true, ".mpeg": true, ".ts": true, ".m2ts": true,
+	".mp3": true, ".flac": true, ".ogg": true, ".wav": true,
+	".aac": true, ".opus": true, ".m4a": true,
+}
 
 type winRECT struct{ Left, Top, Right, Bottom int32 }
 
@@ -125,13 +135,16 @@ func (t *TabInstance) writeIPC(msg string) error {
 	return err
 }
 
-func (t *TabInstance) startReader() {
+func (t *TabInstance) startReader(a *App, tabID string, watchEOF bool) {
 	t.ipcMu.Lock()
 	conn := t.ipcConn
 	fmt.Fprint(conn, `{"command": ["observe_property", 1, "time-pos"]}`+"\n")
 	fmt.Fprint(conn, `{"command": ["observe_property", 2, "duration"]}`+"\n")
 	fmt.Fprint(conn, `{"command": ["observe_property", 3, "pause"]}`+"\n")
 	fmt.Fprint(conn, `{"command": ["observe_property", 4, "volume"]}`+"\n")
+	if watchEOF {
+		fmt.Fprint(conn, `{"command": ["observe_property", 5, "eof-reached"]}`+"\n")
+	}
 	t.ipcMu.Unlock()
 
 	scanner := bufio.NewScanner(conn)
@@ -143,6 +156,7 @@ func (t *TabInstance) startReader() {
 		if msg["event"] != "property-change" {
 			continue
 		}
+		eofSignal := false
 		t.stateMu.Lock()
 		switch msg["name"] {
 		case "time-pos":
@@ -165,8 +179,15 @@ func (t *TabInstance) startReader() {
 			if v, ok := msg["data"].(float64); ok {
 				t.volume = v
 			}
+		case "eof-reached":
+			if v, ok := msg["data"].(bool); ok && v {
+				eofSignal = true
+			}
 		}
 		t.stateMu.Unlock()
+		if eofSignal {
+			runtime.EventsEmit(a.ctx, "playlist-video-ended", tabID)
+		}
 	}
 }
 
@@ -259,42 +280,75 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
-// OpenVideo launches a new mpv instance for the given file and returns a tabID.
-func (a *App) OpenVideo(filePath string) (string, error) {
-	a.emitDebug("OpenVideo", "starting: "+filePath)
+// openMpvTab is the shared implementation for OpenVideo and OpenPlaylistVideo.
+// loopFile=true adds --loop-file=inf; watchEOF=true observes eof-reached and emits playlist-video-ended.
+func (a *App) openMpvTab(filePath string, loopFile bool, watchEOF bool) (string, error) {
+	label := "OpenVideo"
+	if watchEOF {
+		label = "OpenPlaylistVideo"
+	}
+	a.emitDebug(label, "starting: "+filePath)
 	tabID := fmt.Sprintf("tab-%d", time.Now().UnixNano())
 	pipeName := fmt.Sprintf(`\\.\pipe\mpvsocket-%s`, tabID)
 
 	before := getDirectChildren(a.parentHWND)
 
-	cmd := exec.Command(
-		"mpv",
+	// Query the DB before launching mpv so we can pass --start and open at the
+	// saved position directly — no seek-from-0 jump for known files.
+	now := time.Now().Format(time.RFC3339)
+	var savedPos float64
+	var dbID int64
+	var hash string
+	if rec, err := dbUpsertFilepath(filePath, now); err == nil {
+		dbID = rec.ID
+		hash = rec.Hash
+		savedPos = rec.LastPos
+		a.emitDebug("db", fmt.Sprintf("filepath upsert id=%d hash=%q", rec.ID, shortHash(rec.Hash)))
+		if rec.Hash != "" && rec.LastPos > 0 {
+			a.emitDebug("db", fmt.Sprintf("filepath hit — starting at %.1fs", rec.LastPos))
+		} else if rec.Hash != "" {
+			a.emitDebug("db", "filepath hit — no saved position")
+		}
+	} else {
+		a.emitDebug("db", "filepath upsert error: "+err.Error())
+	}
+
+	mpvArgs := []string{
 		fmt.Sprintf("--wid=%d", a.parentHWND),
 		fmt.Sprintf("--input-ipc-server=%s", pipeName),
 		"--no-terminal",
 		"--keep-open=yes",
-		"--loop-file=inf",
-		"--no-input-default-bindings", // prevent mpv from handling its own clicks/keys
-		"--input-vo-keyboard=no",      // prevent mpv vo from consuming keyboard events
-		filePath,
-	)
+		"--no-input-default-bindings",
+		"--input-vo-keyboard=no",
+	}
+	if loopFile {
+		mpvArgs = append(mpvArgs, "--loop-file=inf")
+	}
+	// hash being set means it's the same file (not a new video reusing a path),
+	// so --start is safe and eliminates the seek-from-0 flicker.
+	if hash != "" && savedPos > 0 {
+		mpvArgs = append(mpvArgs, fmt.Sprintf("--start=%f", savedPos))
+	}
+	mpvArgs = append(mpvArgs, filePath)
+
+	cmd := exec.Command("mpv", mpvArgs...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
 	if err := cmd.Start(); err != nil {
-		a.emitDebug("OpenVideo", "mpv start failed: "+err.Error())
+		a.emitDebug(label, "mpv start failed: "+err.Error())
 		return "", fmt.Errorf("mpv start: %w", err)
 	}
-	a.emitDebug("OpenVideo", fmt.Sprintf("mpv pid=%d, connecting IPC...", cmd.Process.Pid))
+	a.emitDebug(label, fmt.Sprintf("mpv pid=%d, connecting IPC...", cmd.Process.Pid))
 
 	conn, err := connectMpvPipe(pipeName, 5*time.Second)
 	if err != nil {
 		cmd.Process.Kill()
-		a.emitDebug("OpenVideo", "IPC connect failed: "+err.Error())
+		a.emitDebug(label, "IPC connect failed: "+err.Error())
 		return "", fmt.Errorf("IPC connect: %w", err)
 	}
 
 	childHWND := waitForNewChildHWND(a.parentHWND, before, 3*time.Second)
-	a.emitDebug("OpenVideo", fmt.Sprintf("childHWND=%d tabID=%s", childHWND, tabID))
+	a.emitDebug(label, fmt.Sprintf("childHWND=%d tabID=%s", childHWND, tabID))
 
 	// Pre-position while hidden so it's in the right place when SwitchTab reveals it.
 	// Push mpv to the bottom of the z-order so WebView2 (created earlier) stays on
@@ -311,24 +365,8 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 		ipcConn:   conn,
 		childHWND: childHWND,
 		paused:    true,
-	}
-
-	// Upsert filepath into DB immediately so recents are updated right away.
-	// This also returns any previously saved hash and position for this path.
-	now := time.Now().Format(time.RFC3339)
-	var savedPos float64
-	if rec, err := dbUpsertFilepath(filePath, now); err == nil {
-		tab.dbID = rec.ID
-		tab.hash = rec.Hash
-		savedPos = rec.LastPos
-		a.emitDebug("db", fmt.Sprintf("filepath upsert id=%d hash=%q", rec.ID, shortHash(rec.Hash)))
-		if rec.Hash != "" && rec.LastPos > 0 {
-			a.emitDebug("db", fmt.Sprintf("filepath hit — restoring %.1fs", rec.LastPos))
-		} else if rec.Hash != "" {
-			a.emitDebug("db", "filepath hit — no saved position")
-		}
-	} else {
-		a.emitDebug("db", "filepath upsert error: "+err.Error())
+		dbID:      dbID,
+		hash:      hash,
 	}
 
 	// Register tab before starting goroutines so hashAndLookup can find it.
@@ -336,20 +374,49 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 	a.tabs[tabID] = tab
 	a.tabsMu.Unlock()
 
-	go tab.startReader()
+	go tab.startReader(a, tabID, watchEOF)
 
 	if tab.hash != "" {
-		// Known file: hash already in DB; restore position if any.
-		if savedPos > 0 {
-			go restorePosition(tab, savedPos)
-		}
 		go a.ensureThumbnails(tabID, tab, filePath, tab.hash, false, false)
 	} else {
-		// Unknown file or DB unavailable: hash in background.
 		go a.hashAndLookup(tabID, filePath)
 	}
 
 	return tabID, nil
+}
+
+// OpenVideo launches a new mpv instance for the given file and returns a tabID.
+func (a *App) OpenVideo(filePath string) (string, error) {
+	return a.openMpvTab(filePath, true, false)
+}
+
+// OpenPlaylistVideo launches an mpv instance without looping, for playlist use.
+// When the file ends, a "playlist-video-ended" event is emitted with the tabID.
+func (a *App) OpenPlaylistVideo(filePath string) (string, error) {
+	return a.openMpvTab(filePath, false, true)
+}
+
+// LoadFile replaces the playing file in an existing mpv tab (playlist advance).
+func (a *App) LoadFile(tabID, filePath string) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("tab %s not found", tabID)
+	}
+
+	// Quick DB upsert so pause-triggered position saving works for the new file.
+	now := time.Now().Format(time.RFC3339)
+	if rec, err := dbUpsertFilepath(filePath, now); err == nil {
+		tab.stateMu.Lock()
+		tab.dbID = rec.ID
+		tab.hash = rec.Hash
+		tab.filePath = filePath
+		tab.stateMu.Unlock()
+	}
+
+	pathJSON, _ := json.Marshal(filePath)
+	return tab.writeIPC(fmt.Sprintf(`{"command": ["loadfile", %s, "replace"]}`, string(pathJSON)) + "\n")
 }
 
 // restorePosition waits for mpv to load, then seeks to the saved position.
@@ -630,6 +697,44 @@ func (a *App) OpenFilePicker() (string, error) {
 		},
 	})
 	return path, err
+}
+
+// OpenFilePickerMultiple opens a native multi-select file dialog.
+func (a *App) OpenFilePickerMultiple() ([]string, error) {
+	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Add Files to Playlist",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Media Files", Pattern: "*.mp4;*.mkv;*.avi;*.mov;*.webm;*.flv;*.wmv;*.m4v;*.ts;*.m2ts;*.mp3;*.flac;*.ogg;*.wav;*.aac;*.opus;*.m4a"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	return paths, err
+}
+
+// OpenFolderPicker opens a native folder selection dialog.
+func (a *App) OpenFolderPicker() (string, error) {
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Folder",
+	})
+}
+
+// GetMediaFilesInFolder returns non-recursively all media files in a directory, sorted by name.
+func (a *App) GetMediaFilesInFolder(folderPath string) ([]string, error) {
+	entries, err := os.ReadDir(folderPath)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if mediaExtensions[strings.ToLower(filepath.Ext(e.Name()))] {
+			files = append(files, filepath.Join(folderPath, e.Name()))
+		}
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 // CloseTab kills the mpv process for the given tab.
