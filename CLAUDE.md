@@ -13,7 +13,7 @@
 
 ## Project overview
 
-**AwesomeVideoPlayer** — a desktop video player built with [Wails v2](https://wails.io/) (Go backend + React/JSX frontend). Video playback uses **mpv** as a subprocess whose window is embedded into the Wails parent window via Win32 HWND (`--wid`). The UI (tabs, controls, overlays) is rendered by WebView2 on top.
+**Sunset Video Player** — a desktop video player built with [Wails v2](https://wails.io/) (Go backend + React/JSX frontend). Video playback uses **mpv** as a subprocess whose window is embedded into the Wails parent window via Win32 HWND (`--wid`). The UI (tabs, controls, overlays) is rendered by WebView2 on top.
 
 ### Tech stack
 
@@ -93,9 +93,9 @@ Wails window  (Win32 parent HWND)
 |---|---|
 | `wails.json` | App name, version (source of truth for version number) |
 | `docs/CHANGELOG.md` | User-facing changelog, embedded into the binary |
-| `%APPDATA%\AwesomeVideoPlayer\data\recent.json` | Recently opened files (max 20) |
-| `%APPDATA%\AwesomeVideoPlayer\config\` | Future: `preferences.json`, `keybinds.json` |
-| `%APPDATA%\AwesomeVideoPlayer\data\media\` | Future: seek thumbnails, audio waveforms, timeline data |
+| `%APPDATA%\Sunset Video Player\data\recent.json` | Recently opened files (max 20) |
+| `%APPDATA%\Sunset Video Player\config\` | Future: `preferences.json`, `keybinds.json` |
+| `%APPDATA%\Sunset Video Player\data\media\` | Future: seek thumbnails, audio waveforms, timeline data |
 
 ---
 

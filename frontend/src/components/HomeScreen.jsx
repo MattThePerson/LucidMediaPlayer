@@ -27,7 +27,7 @@ export default function HomeScreen({ version, isDragging, onOpenChangelog }) {
     return (
         <div className="home-screen">
             <AppIcon className="home-icon" />
-            <div className="home-title">Awesome Video Player</div>
+            <div className="home-title">Sunset Video Player</div>
             <div className="home-version" onClick={onOpenChangelog} role="button" tabIndex={0}>
                 Version {version}
             </div>

@@ -24,9 +24,9 @@ type RecentEntry struct {
 //
 // Layout:
 //
-//	Windows : %APPDATA%\AwesomeVideoPlayer\
-//	macOS   : ~/Library/Application Support/AwesomeVideoPlayer/
-//	Linux   : $XDG_CONFIG_HOME/AwesomeVideoPlayer/  (fallback: ~/.config/…)
+//	Windows : %APPDATA%\Sunset Video Player\
+//	macOS   : ~/Library/Application Support/Sunset Video Player/
+//	Linux   : $XDG_CONFIG_HOME/Sunset Video Player/  (fallback: ~/.config/…)
 //
 // Subdirectory conventions (created on demand):
 //
@@ -62,7 +62,7 @@ func appDataDir() (string, error) {
 			base = filepath.Join(home, ".config")
 		}
 	}
-	dir := filepath.Join(base, "AwesomeVideoPlayer")
+	dir := filepath.Join(base, "Sunset Video Player")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

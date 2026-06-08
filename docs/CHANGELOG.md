@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.0] — 2026-06-08
+- Rename project to "Sunset Video Player"
+- Window title, home screen, AppData directory, exe output all updated; folder rename pending
+
 ## [0.0.18] — 2026-06-08
 - Fix black video: PassionPlayer background was opaque black, blocking mpv HWND window
 - Fix second-tab controls first tab: ref-based callbacks in PassionPlayerWrapper so the long-lived PassionPlayer instance always calls the current tab's functions
