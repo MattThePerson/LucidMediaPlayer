@@ -72,7 +72,10 @@ export class PassionPlayer {
         if (!this.root_element) {
             throw new Error(`Cannot inject Passion Player, no element with id: ${this.player_id}`);
         }
-        this.shadow = this.root_element.attachShadow({ mode: 'open' });
+        // Reuse an existing shadow root if present (React Strict Mode fires effects twice
+        // on the same element; attachShadow throws on a second call).
+        this.shadow = this.root_element.shadowRoot ?? this.root_element.attachShadow({ mode: 'open' });
+        this.shadow.innerHTML = '';
 
         await this.addStyles(this.shadow, this.dev_styles_path);
         this.addHTML(this.shadow);
@@ -135,11 +138,26 @@ export class PassionPlayer {
             const el = this.$('.time-duration-container .duration');
             if (el) el.textContent = this.format_time(this.video.duration);
         }
+        this.updatePlayBtn();
     }
 
     addEventListeners() {
         this.addVideoClickEventListeners();
         this.addDefaultProgressBarEventListeners();
+        this.addPlayBtnEventListeners();
+    }
+
+    addPlayBtnEventListeners() {
+        const btn = this.$('.pp-play-btn');
+        if (!btn) return;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggle_playback();
+        });
+        if (this.video) {
+            this.video.addEventListener('play',  () => this.updatePlayBtn());
+            this.video.addEventListener('pause', () => this.updatePlayBtn());
+        }
     }
 
     addVideoClickEventListeners() {
@@ -250,6 +268,9 @@ export class PassionPlayer {
                 </div>
 
             </div>
+
+            <!-- play/pause button -->
+            <button class="pp-play-btn" title="Play/Pause">▶</button>
 
             <!-- icons -->
             <div class="play-pause-indicator">
@@ -426,6 +447,8 @@ export class PassionPlayer {
 
         const durationEl = this.$('.time-duration-container .duration');
         if (durationEl) durationEl.textContent = this.format_time(this._duration);
+
+        if (paused !== undefined) this.updatePlayBtn();
     }
 
     // ====================================================================================================
@@ -460,17 +483,27 @@ export class PassionPlayer {
                 this.flashPPIndicator('.pause-icon');
             }
             this._paused = !this._paused;
+            this.updatePlayBtn();
         }
     }
 
     pauseVideo() {
         this.video.pause();
         this.flashPPIndicator('.pause-icon');
+        this.updatePlayBtn();
     }
 
     playVideo() {
         this.video.play();
         this.flashPPIndicator('.play-icon');
+        this.updatePlayBtn();
+    }
+
+    updatePlayBtn() {
+        const btn = this.$('.pp-play-btn');
+        if (!btn) return;
+        const paused = this.video ? this.video.paused : this._paused;
+        btn.textContent = paused ? '▶' : '⏸';
     }
 
     flashPPIndicator(selector) {
@@ -519,18 +552,168 @@ export class PassionPlayer {
 
     getStyles() {
         return /* css */`
-            .PassionPlayer {
-                height: 100%;
-                width: 100%;
-                background: transparent;
-                display: flex;
-                justify-content: center;
-                position: relative;
-            }
-            video {
-                height: 100%;
-                width: 100%;
-            }
+
+.PassionPlayer {
+    height: 100%;
+    width: 100%;
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    position: relative;
+}
+
+video {
+    height: 100%;
+    width: 100%;
+    cursor: pointer;
+    user-drag: none;
+    -webkit-user-drag: none;
+    user-select: none;
+}
+
+/* - VIDEO CONTROLS --------------------------------------------------------- */
+
+#progress-bar-default {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 12px;
+    cursor: pointer;
+    background: #4987;
+}
+
+.progress-bar-wrapper {
+    position: absolute; bottom: 0; left: 0;
+    width: 100%;
+    height: 5px;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0;
+    background: pink;
+}
+
+#progress-bar-alt {
+    display: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3rem;
+    background: #4847;
+    cursor: pointer;
+}
+
+#playhead {
+    position: absolute;
+    top: 0;
+    left: calc(50% - 2px);
+    width: 2px;
+    height: calc(100% - 8px);
+    margin: 4px 0;
+    background: orangered;
+    border-radius: 2px;
+}
+
+.time-duration-container {
+    position: absolute;
+    bottom: 3rem;
+    left: 4rem;
+    display: flex;
+    gap: 4px;
+    background: #0007;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+/* PLAY/PAUSE INDICATOR */
+
+.play-pause-indicator {
+    width: fit-content;
+    height: fit-content;
+    position: absolute;
+    top: calc(50% - 24px);
+    left: calc(50% - 24px);
+    pointer-events: none;
+}
+.play-pause-indicator svg path {
+    fill: #fffd;
+}
+.pp-icon {
+    display: none;
+    opacity: 0;
+    width: 48px;
+    height: 48px;
+    padding: 1.4rem;
+    background: #0005;
+    border-radius: 50%;
+    border: 1px solid #fff4;
+    transform-origin: center;
+    transform: scale(110%);
+    transition:
+        opacity 500ms ease-out,
+        transform 500ms ease-out
+    ;
+}
+.pp-icon.shown {
+    opacity: 1;
+    transform: scale(80%);
+    transition: none;
+}
+
+/* SEEK THUMBS */
+
+#seek-thumbs-container {
+    visibility: hidden;
+    position: absolute;
+    bottom: 5rem;
+    left: 0;
+    height: 200px;
+    width: fit-content;
+    background: #222;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.seek-thumbnail {
+    height: 100%;
+}
+
+/* PLAY/PAUSE BUTTON */
+
+.pp-play-btn {
+    position: absolute;
+    bottom: 20px;
+    left: 8px;
+    width: 36px;
+    height: 36px;
+    background: #0007;
+    border: 1px solid #fff3;
+    border-radius: 6px;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 150ms;
+}
+.pp-play-btn:hover {
+    background: #000b;
+}
+
+#seek-thumbs-container .time {
+    position: absolute;
+    left: 3px;
+    font-size: 12px;
+    padding: 1px 5px;
+    background: #0008;
+    border-radius: 3px;
+}
+
         `;
     }
 }

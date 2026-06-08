@@ -21,7 +21,6 @@ export default function PassionPlayerWrapper({ info, onTogglePlayback, onSeek, o
             onPause:      () => onTogglePlaybackRef.current?.(),
             onSeek:   pos => onSeekRef.current?.(pos),
             onFullscreen: () => onFullscreenRef.current?.(),
-            styles: '/PassionPlayer.css',
             disable_keybinds: true,
             quiet: true,
         });

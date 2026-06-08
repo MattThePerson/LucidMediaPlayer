@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.5] — 2026-06-08
+- Fix PassionPlayer styles not loading: reuse existing shadow root instead of calling attachShadow twice (React Strict Mode double-mount)
+
+## [0.1.4] — 2026-06-08
+- Move PassionPlayer.js back to src/passion_player/ — static import, no Vite/Rollup workarounds needed
+- Inline all CSS into getStyles() — PassionPlayer.js is now fully self-contained (no external CSS file)
+
+## [0.1.3] — 2026-06-08
+- Fix vite build: mark /PassionPlayer.js as external in rollupOptions so Rollup doesn't try to bundle it
+
+## [0.1.2] — 2026-06-08
+- Move PassionPlayer.js to frontend/public/ — single source, no duplicate CSS; wrapper uses dynamic import('/PassionPlayer.js')
+
+## [0.1.1] — 2026-06-08
+- PassionPlayer: add play/pause button (bottom-left, ▶/⏸); updates on toggle, external setState, and native video play/pause events
+
 ## [0.1.0] — 2026-06-08
 - Rename project to "Sunset Video Player"
 - Window title, home screen, AppData directory, exe output all updated; folder rename pending
