@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.23] — 2026-06-08
+- Change: "Recently Opened" is now a fuzzy-find overlay (VS Code style) instead of a submenu
+- Add: Ctrl+R keybind opens the recent files overlay
+- Add: type to filter; arrow keys / Ctrl+N/P to move selection; Enter or click to open; Escape to close
+- Add: "Clear Recents" button at the bottom of the overlay
+
 ## [0.1.22] — 2026-06-08
 - Add: video controls fade out (500ms) when cursor leaves or is idle for 2 seconds; cursor hides too
 - Add: "One video playing at a time" setting — switching tabs auto-pauses; switching back resumes

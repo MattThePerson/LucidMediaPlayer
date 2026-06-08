@@ -776,6 +776,109 @@ body {
     opacity: 1;
 }
 
+/* ── Recent Files Overlay ─────────────────────────────────────────────────── */
+
+.recent-overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+}
+
+.recent-overlay {
+    position: absolute;
+    top: 44px; /* tab bar (36px) + 8px gap */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 580px;
+    max-width: calc(100vw - 40px);
+    background: #1e1e1e;
+    border: 1px solid #383838;
+    border-radius: 8px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    max-height: calc(100vh - 64px);
+}
+
+.recent-overlay-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #2e2e2e;
+    color: #ddd;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 11px 16px;
+    outline: none;
+}
+.recent-overlay-input::placeholder { color: #444; }
+
+.recent-overlay-list {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+.recent-overlay-list::-webkit-scrollbar { width: 6px; }
+.recent-overlay-list::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+
+.recent-overlay-item {
+    display: flex;
+    flex-direction: column;
+    padding: 7px 16px;
+    cursor: pointer;
+    gap: 2px;
+    border-bottom: 1px solid transparent;
+}
+.recent-overlay-item.selected { background: #1e3060; }
+.recent-overlay-item:not(.selected):hover { background: #252525; }
+
+.recent-overlay-filename {
+    font-size: 13px;
+    color: #ddd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.recent-overlay-item.selected .recent-overlay-filename { color: #fff; }
+
+.recent-overlay-path {
+    font-size: 11px;
+    color: #484848;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'Consolas', monospace;
+}
+.recent-overlay-item.selected .recent-overlay-path { color: #6080b0; }
+
+.recent-overlay-empty {
+    padding: 20px 16px;
+    color: #3a3a3a;
+    font-style: italic;
+    font-size: 13px;
+}
+
+.recent-overlay-footer {
+    border-top: 1px solid #272727;
+    padding: 5px 10px;
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+.recent-overlay-clear {
+    background: none;
+    border: none;
+    color: #484848;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 3px;
+}
+.recent-overlay-clear:hover { color: #c06060; background: #2a1a1a; }
+
 /* ── Home screen: clickable shortcut hints ────────────────────────────────── */
 
 .home-shortcut-hint.clickable {

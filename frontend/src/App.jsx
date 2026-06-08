@@ -11,6 +11,7 @@ import {
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
 import TabBar from './components/TabBar';
+import RecentFilesOverlay from './components/RecentFilesOverlay';
 import HomeScreen from './components/HomeScreen';
 import PassionPlayerWrapper from './components/PassionPlayerWrapper';
 import DebugPage from './components/DebugPage';
@@ -34,6 +35,7 @@ function App() {
     const [seekThumbs, setSeekThumbs] = useState(null);
     const [notification, setNotification] = useState(null);
     const [isWorking, setIsWorking] = useState(false);
+    const [recentOverlayOpen, setRecentOverlayOpen] = useState(false);
     const [preferences, setPreferences] = useState({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false });
     // playlists: { [playlistTabId]: { items, selectedIndex, currentIndex, random, videoTabId, playedIndices } }
     const [playlists, setPlaylists] = useState({});
@@ -522,6 +524,11 @@ function App() {
             const tag = document.activeElement?.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
+            if (recentOverlayOpen) {
+                if (e.code === 'Escape') { e.preventDefault(); setRecentOverlayOpen(false); }
+                return;
+            }
+
             const isVideo = activeTab?.type === 'video';
             const isPlaylistPlaying = activeTab?.type === 'playlist' && playlists[activeTabId]?.videoTabId;
             const isVideoActive = isVideo || isPlaylistPlaying;
@@ -573,6 +580,10 @@ function App() {
                 handlePlaylistPrev(activeTabId);
             }
 
+            if (e.ctrlKey && e.code === 'KeyR' && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                setRecentOverlayOpen(true);
+            }
             if (e.ctrlKey && e.code === 'KeyO' && !e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 if (chordActiveRef.current) {
@@ -665,7 +676,7 @@ function App() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [activeTabId, activeTab, tabs, isFullscreen, info, playlists,
+    }, [activeTabId, activeTab, tabs, isFullscreen, info, playlists, recentOverlayOpen,
         effectiveVideoTabId, handleCloseTab, handleSwitchTab, handleTogglePlayback,
         handleOpenFile, openPageTab, openVideoPath, openNewPlaylist, openFolderAsPlaylist,
         handlePlaylistNext, handlePlaylistPrev, handlePlaylistCloseVideo, setTabs]);
@@ -688,9 +699,7 @@ function App() {
                     onNewPlaylist={openNewPlaylist}
                     onOpenFolderAsPlaylist={openFolderAsPlaylist}
                     onReorder={handleReorderTab}
-                    recentFiles={recentFiles}
-                    onOpenRecent={openVideoPath}
-                    onClearRecent={handleClearRecent}
+                    onOpenRecentOverlay={() => setRecentOverlayOpen(true)}
                     version={version}
                     isWorking={isWorking}
                 />
@@ -746,6 +755,14 @@ function App() {
                     <PreferencesPage preferences={preferences} onSave={handleSavePreferences} />
                 )}
             </div>
+            {recentOverlayOpen && (
+                <RecentFilesOverlay
+                    recentFiles={recentFiles}
+                    onOpen={openVideoPath}
+                    onClear={handleClearRecent}
+                    onClose={() => setRecentOverlayOpen(false)}
+                />
+            )}
         </div>
     );
 }

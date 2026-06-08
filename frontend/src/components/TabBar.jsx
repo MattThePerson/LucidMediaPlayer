@@ -7,17 +7,15 @@ export default function TabBar({
     onOpenFile, onOpenDebug, onOpenChangelog, onOpenPreferences,
     onNewPlaylist, onOpenFolderAsPlaylist,
     onReorder,
-    recentFiles, onOpenRecent, onClearRecent,
+    onOpenRecentOverlay,
     version, isWorking,
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
-    const [recentOpen, setRecentOpen] = useState(false);
     const [draggingId, setDraggingId] = useState(null);
     const menuRef = useRef(null);
     const tabsListRef = useRef(null);
     const draggedIdRef = useRef(null);
     const lastOverRef = useRef(null);
-    const recentTimerRef = useRef(null);
 
     // Close main dropdown on outside click or Escape
     useEffect(() => {
@@ -25,14 +23,12 @@ export default function TabBar({
         const onMouseDown = (e) => {
             if (menuRef.current && !menuRef.current.contains(e.target)) {
                 setMenuOpen(false);
-                setRecentOpen(false);
             }
         };
         const onKey = (e) => {
             if (e.code === 'Escape') {
                 e.stopPropagation();
                 setMenuOpen(false);
-                setRecentOpen(false);
             }
         };
         document.addEventListener('mousedown', onMouseDown);
@@ -93,20 +89,7 @@ export default function TabBar({
         }
     };
 
-    // Submenu hover helpers — 150ms close delay lets the mouse travel from
-    // trigger to submenu without snapping shut across the dropdown border gap
-    const openRecent = () => {
-        clearTimeout(recentTimerRef.current);
-        setRecentOpen(true);
-    };
-    const scheduleCloseRecent = () => {
-        recentTimerRef.current = setTimeout(() => setRecentOpen(false), 150);
-    };
-
-    const closeMenu = () => {
-        setMenuOpen(false);
-        setRecentOpen(false);
-    };
+    const closeMenu = () => setMenuOpen(false);
     const menuItem = (label, handler) => (
         <div className="dropdown-item" onClick={() => { closeMenu(); handler(); }}>
             {label}
@@ -131,49 +114,7 @@ export default function TabBar({
 
                         <div className="dropdown-separator" />
 
-                        {/* Recently Opened submenu */}
-                        <div
-                            className="dropdown-submenu-wrapper"
-                            onMouseEnter={openRecent}
-                            onMouseLeave={scheduleCloseRecent}
-                        >
-                            <div className="dropdown-item dropdown-item-has-submenu">
-                                Recently Opened
-                                <span className="dropdown-submenu-arrow">▸</span>
-                            </div>
-                            {recentOpen && (
-                                <div
-                                    className="dropdown-submenu"
-                                    onMouseEnter={openRecent}
-                                    onMouseLeave={scheduleCloseRecent}
-                                >
-                                    {recentFiles.length === 0
-                                        ? <div className="dropdown-item dropdown-item-empty">No recent files</div>
-                                        : recentFiles.map(f => (
-                                            <div
-                                                key={f.path}
-                                                className="dropdown-item dropdown-item-recent"
-                                                title={f.path}
-                                                onClick={() => { closeMenu(); onOpenRecent(f.path); }}
-                                            >
-                                                {f.filename}
-                                            </div>
-                                        ))
-                                    }
-                                    {recentFiles.length > 0 && (
-                                        <>
-                                            <div className="dropdown-separator" />
-                                            <div
-                                                className="dropdown-item dropdown-item-clear"
-                                                onClick={() => { closeMenu(); onClearRecent(); }}
-                                            >
-                                                Clear Recent
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                        {menuItemWithShortcut('Open Recent…', 'Ctrl+R', onOpenRecentOverlay)}
 
                         <div className="dropdown-separator" />
                         {menuItemWithShortcut('Debug Log', 'F3', onOpenDebug)}
