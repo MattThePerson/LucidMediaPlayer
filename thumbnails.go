@@ -112,13 +112,21 @@ func formatVTTTime(s float64) string {
 	return fmt.Sprintf("%02d:%02d:%06.3f", h, m, sec)
 }
 
+// tlog calls logFn if non-nil.
+func tlog(logFn func(string), msg string) {
+	if logFn != nil {
+		logFn(msg)
+	}
+}
+
 // generateThumbnails extracts thumbCount frames with a parallel worker pool,
 // assembles them into a spritesheet, and writes spritesheet.jpg + spritesheet.vtt
-// to media/<hash>/. Returns nil immediately on cache hit.
-func generateThumbnails(videoPath, hash string, duration float64) error {
+// to media/<hash>/. Returns (true, nil) if skipped (cache hit or concurrent guard),
+// (false, nil) on successful fresh generation, or (false, err) on failure.
+func generateThumbnails(videoPath, hash string, duration float64, logFn func(string)) (bool, error) {
 	dir, err := mediaDir(hash)
 	if err != nil {
-		return fmt.Errorf("mediaDir: %w", err)
+		return false, fmt.Errorf("mediaDir: %w", err)
 	}
 	ssPath := filepath.Join(dir, "spritesheet.jpg")
 	vttPath := filepath.Join(dir, "spritesheet.vtt")
@@ -126,25 +134,30 @@ func generateThumbnails(videoPath, hash string, duration float64) error {
 	// Cache hit: skip generation if both output files already exist.
 	if _, e1 := os.Stat(ssPath); e1 == nil {
 		if _, e2 := os.Stat(vttPath); e2 == nil {
-			return nil
+			tlog(logFn, "cache hit — skipping")
+			return true, nil
 		}
 	}
 
 	// Prevent duplicate concurrent generation for the same video hash.
 	if _, loaded := thumbsInProgress.LoadOrStore(hash, struct{}{}); loaded {
-		return nil
+		tlog(logFn, "generation already in progress, skipping")
+		return true, nil
 	}
 	defer thumbsInProgress.Delete(hash)
 
 	ffmpeg, err := ffmpegPath()
 	if err != nil {
-		return err
+		return false, err
 	}
+	tlog(logFn, "ffmpeg: "+ffmpeg)
 
 	thumbW := int(math.Round(float64(thumbHeight) * 16.0 / 9.0))
 	if thumbW%2 != 0 {
 		thumbW++
 	}
+	cols := int(math.Ceil(math.Sqrt(float64(thumbCount))))
+	tlog(logFn, fmt.Sprintf("extracting %d frames (%d×%d grid, %d×%dpx)", thumbCount, cols, cols, thumbW, thumbHeight))
 
 	// Sample points offset by 0.5 so we never land exactly on t=0 (likely a black frame).
 	timestamps := make([]float64, thumbCount)
@@ -176,21 +189,32 @@ func generateThumbnails(videoPath, hash string, duration float64) error {
 	}
 	wg.Wait()
 
+	var okCnt int
+	for _, img := range frames {
+		if img != nil {
+			okCnt++
+		}
+	}
+	tlog(logFn, fmt.Sprintf("frames done — %d/%d ok", okCnt, thumbCount))
+
 	spritesheet, vttContent := buildSpritesheet(frames, thumbW, thumbHeight, duration)
 
 	f, err := os.Create(ssPath)
 	if err != nil {
-		return fmt.Errorf("create spritesheet: %w", err)
+		return false, fmt.Errorf("create spritesheet: %w", err)
 	}
 	if encErr := jpeg.Encode(f, spritesheet, &jpeg.Options{Quality: 88}); encErr != nil {
 		f.Close()
 		os.Remove(ssPath)
-		return fmt.Errorf("encode spritesheet: %w", encErr)
+		return false, fmt.Errorf("encode spritesheet: %w", encErr)
 	}
 	f.Close()
 
 	if err := os.WriteFile(vttPath, []byte(vttContent), 0o644); err != nil {
-		return fmt.Errorf("write vtt: %w", err)
+		return false, fmt.Errorf("write vtt: %w", err)
 	}
-	return nil
+	if fi, err := os.Stat(ssPath); err == nil {
+		tlog(logFn, fmt.Sprintf("spritesheet written — %d KB", fi.Size()/1024))
+	}
+	return false, nil
 }

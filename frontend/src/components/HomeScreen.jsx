@@ -31,6 +31,12 @@ export default function HomeScreen({ version, isDragging, onOpenChangelog }) {
             <div className="home-version" onClick={onOpenChangelog} role="button" tabIndex={0}>
                 Version {version}
             </div>
+            <div className="home-shortcuts">
+                <div className="home-shortcut-hint">
+                    <kbd>Ctrl+O</kbd>
+                    <span>Open video</span>
+                </div>
+            </div>
             {isDragging && (
                 <div className="drop-overlay">
                     <svg className="drop-overlay-arrow" width="44" height="44" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

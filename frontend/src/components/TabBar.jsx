@@ -4,7 +4,7 @@ import { Quit } from '../../wailsjs/runtime/runtime';
 export default function TabBar({
     tabs, activeTabId, tabsState,
     onSwitch, onClose,
-    onOpenFile, onOpenDebug, onOpenChangelog, onReorder,
+    onOpenFile, onOpenDebug, onOpenChangelog, onOpenPreferences, onReorder,
     recentFiles, onOpenRecent, onClearRecent,
     version,
 }) {
@@ -99,6 +99,12 @@ export default function TabBar({
             {label}
         </div>
     );
+    const menuItemWithShortcut = (label, shortcut, handler) => (
+        <div className="dropdown-item-with-shortcut" onClick={() => { closeMenu(); handler(); }}>
+            <span>{label}</span>
+            <span className="dropdown-shortcut">{shortcut}</span>
+        </div>
+    );
 
     return (
         <div className="tab-bar">
@@ -106,7 +112,7 @@ export default function TabBar({
                 ☰
                 {menuOpen && (
                     <div className="dropdown" onClick={e => e.stopPropagation()}>
-                        {menuItem('Open File…', onOpenFile)}
+                        {menuItemWithShortcut('Open File…', 'Ctrl+O', onOpenFile)}
 
                         <div className="dropdown-separator" />
 
@@ -161,7 +167,7 @@ export default function TabBar({
                             {version && <span className="dropdown-version">{version}</span>}
                         </div>
                         <div className="dropdown-separator" />
-                        {menuItem('Preferences', () => {})}
+                        {menuItem('Preferences', onOpenPreferences)}
                         <div className="dropdown-separator" />
                         {menuItem('Quit', () => Quit())}
                     </div>

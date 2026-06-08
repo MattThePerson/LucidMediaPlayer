@@ -14,6 +14,8 @@ export function GetChangelog():Promise<string>;
 
 export function GetPlaybackInfo(arg1:string):Promise<main.PlaybackInfo>;
 
+export function GetPreferences():Promise<main.Preferences>;
+
 export function GetRecentFiles():Promise<Array<main.RecentEntry>>;
 
 export function GetSeekThumbnailData(arg1:string):Promise<main.SeekThumbnailData>;
@@ -24,11 +26,17 @@ export function OpenFilePicker():Promise<string>;
 
 export function OpenVideo(arg1:string):Promise<string>;
 
+export function RegenerateSeekThumbnails(arg1:string):Promise<void>;
+
 export function ResizeVideo():Promise<void>;
+
+export function SavePreferences(arg1:main.Preferences):Promise<void>;
 
 export function Seek(arg1:string,arg2:number):Promise<void>;
 
 export function SetVolume(arg1:string,arg2:number):Promise<void>;
+
+export function StartSeekThumbnailGeneration(arg1:string):Promise<void>;
 
 export function SwitchTab(arg1:string):Promise<void>;
 

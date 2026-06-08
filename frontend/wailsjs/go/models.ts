@@ -18,6 +18,18 @@ export namespace main {
 	        this.volume = source["volume"];
 	    }
 	}
+	export class Preferences {
+	    autogenerateSeekThumbs: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Preferences(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.autogenerateSeekThumbs = source["autogenerateSeekThumbs"];
+	    }
+	}
 	export class RecentEntry {
 	    path: string;
 	    filename: string;

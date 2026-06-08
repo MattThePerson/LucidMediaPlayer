@@ -179,6 +179,7 @@ type App struct {
 	isFullscreen     bool
 	savedWindowStyle uint32
 	savedWindowRect  winRECT
+	prefs            Preferences
 }
 
 func NewApp() *App {
@@ -187,6 +188,7 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.prefs = loadPreferences()
 	if err := initDB(); err != nil {
 		a.emitDebug("db", "initDB failed: "+err.Error())
 	} else {
@@ -258,9 +260,9 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 		"mpv",
 		fmt.Sprintf("--wid=%d", a.parentHWND),
 		fmt.Sprintf("--input-ipc-server=%s", pipeName),
-		"--pause",
 		"--no-terminal",
 		"--keep-open=yes",
+		"--loop-file=inf",
 		"--no-input-default-bindings", // prevent mpv from handling its own clicks/keys
 		"--input-vo-keyboard=no",      // prevent mpv vo from consuming keyboard events
 		filePath,
@@ -330,7 +332,7 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 		if savedPos > 0 {
 			go restorePosition(tab, savedPos)
 		}
-		go a.ensureThumbnails(tabID, tab, filePath, tab.hash)
+		go a.ensureThumbnails(tabID, tab, filePath, tab.hash, false, false)
 	} else {
 		// Unknown file or DB unavailable: hash in background.
 		go a.hashAndLookup(tabID, filePath)
@@ -396,7 +398,7 @@ func (a *App) hashAndLookup(tabID, filePath string) {
 		}
 	}
 
-	go a.ensureThumbnails(tabID, tab, filePath, hash)
+	go a.ensureThumbnails(tabID, tab, filePath, hash, false, false)
 }
 
 // shortHash returns the first 8 chars of a hash (for debug output), or "" if empty.
@@ -407,10 +409,44 @@ func shortHash(h string) string {
 	return h
 }
 
-// ensureThumbnails waits for mpv to report video duration, then generates seek
-// thumbnails in the background if not already cached. Runs as a goroutine.
-func (a *App) ensureThumbnails(tabID string, tab *TabInstance, videoPath, hash string) {
-	// Poll for duration — mpv reports it via IPC within ~1s of opening the file.
+// ensureThumbnails checks the thumbnail cache for the given video and either
+// notifies the frontend of existing data or generates new thumbnails.
+// forceGenerate=true deletes existing files and regenerates unconditionally.
+// Runs as a goroutine.
+// ensureThumbnails checks the thumbnail cache and generates if needed.
+//   forceGenerate=true  — delete existing files and regenerate (Shift+F5)
+//   manualTrigger=true  — user pressed F5; generate even if autogenerate pref is off
+// Runs as a goroutine.
+func (a *App) ensureThumbnails(tabID string, tab *TabInstance, videoPath, hash string, forceGenerate, manualTrigger bool) {
+	logFn := func(msg string) { a.emitDebug("thumbs", msg) }
+
+	dir, err := mediaDir(hash)
+	if err != nil {
+		logFn("mediaDir error: " + err.Error())
+		return
+	}
+	ssPath := filepath.Join(dir, "spritesheet.jpg")
+	vttPath := filepath.Join(dir, "spritesheet.vtt")
+
+	isCached := func() bool {
+		_, e1 := os.Stat(ssPath)
+		_, e2 := os.Stat(vttPath)
+		return e1 == nil && e2 == nil
+	}
+
+	// Cache hit and not forced: notify frontend immediately, no generation needed.
+	if isCached() && !forceGenerate {
+		logFn("cache hit — notifying frontend")
+		runtime.EventsEmit(a.ctx, "seek-thumbs-ready", tabID)
+		return
+	}
+
+	// Determine whether to generate: force, manual trigger, or autogenerate pref.
+	if !forceGenerate && !manualTrigger && !a.prefs.AutogenerateSeekThumbs {
+		return
+	}
+
+	// Need to generate: poll for duration first.
 	var duration float64
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
@@ -423,21 +459,81 @@ func (a *App) ensureThumbnails(tabID string, tab *TabInstance, videoPath, hash s
 		time.Sleep(200 * time.Millisecond)
 	}
 	if duration <= 0 {
-		a.emitDebug("thumbs", "duration unavailable, skipping thumbnail generation")
+		logFn("duration unavailable, skipping thumbnail generation")
 		return
+	}
+
+	if forceGenerate {
+		os.Remove(ssPath)
+		os.Remove(vttPath)
+		logFn("force regeneration — deleted cached files")
 	}
 
 	a.emitDebug("thumbs", fmt.Sprintf("generating thumbnails for %s (%.0fs)", filepath.Base(videoPath), duration))
+	runtime.EventsEmit(a.ctx, "seek-thumbs-generating", tabID)
 	start := time.Now()
 
-	if err := generateThumbnails(videoPath, hash, duration); err != nil {
-		a.emitDebug("thumbs", "generation error: "+err.Error())
+	skipped, err := generateThumbnails(videoPath, hash, duration, logFn)
+	if err != nil {
+		logFn("generation error: " + err.Error())
 		return
 	}
-
-	elapsed := time.Since(start)
-	a.emitDebug("thumbs", fmt.Sprintf("thumbnails ready in %.1fs", elapsed.Seconds()))
+	if skipped {
+		// Concurrent guard hit — the other goroutine will emit seek-thumbs-ready.
+		return
+	}
+	logFn(fmt.Sprintf("thumbnails ready in %.1fs", time.Since(start).Seconds()))
 	runtime.EventsEmit(a.ctx, "seek-thumbs-ready", tabID)
+}
+
+// GetPreferences returns the current user preferences.
+func (a *App) GetPreferences() Preferences {
+	return a.prefs
+}
+
+// SavePreferences persists the given preferences to disk and updates in-memory state.
+func (a *App) SavePreferences(p Preferences) error {
+	if err := savePreferences(p); err != nil {
+		return err
+	}
+	a.prefs = p
+	return nil
+}
+
+// StartSeekThumbnailGeneration triggers thumbnail generation for the given tab.
+func (a *App) StartSeekThumbnailGeneration(tabID string) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("tab not found")
+	}
+	tab.stateMu.RLock()
+	hash := tab.hash
+	tab.stateMu.RUnlock()
+	if hash == "" {
+		return fmt.Errorf("hash not available yet — try again in a moment")
+	}
+	go a.ensureThumbnails(tabID, tab, tab.filePath, hash, false, true)
+	return nil
+}
+
+// RegenerateSeekThumbnails forces deletion and re-generation of seek thumbnails.
+func (a *App) RegenerateSeekThumbnails(tabID string) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("tab not found")
+	}
+	tab.stateMu.RLock()
+	hash := tab.hash
+	tab.stateMu.RUnlock()
+	if hash == "" {
+		return fmt.Errorf("hash not available yet")
+	}
+	go a.ensureThumbnails(tabID, tab, tab.filePath, hash, true, false)
+	return nil
 }
 
 // GetSeekThumbnailData returns the VTT text and base64-encoded spritesheet for
@@ -715,14 +811,21 @@ func (a *App) ResizeVideo() {
 	a.positionChildWindow(tab.childHWND)
 }
 
-// GetRecentFiles returns up to 10 recently-opened paths from the DB.
+// GetRecentFiles returns up to 10 recently-opened paths from the DB,
+// filtered to only include files that currently exist on disk.
 func (a *App) GetRecentFiles() []RecentEntry {
 	entries, err := dbGetRecents(10)
 	if err != nil {
 		a.emitDebug("db", "GetRecentFiles error: "+err.Error())
 		return []RecentEntry{}
 	}
-	return entries
+	out := entries[:0]
+	for _, e := range entries {
+		if _, err := os.Stat(e.Path); err == nil {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // ClearRecentFiles hides all entries from the recents list while preserving

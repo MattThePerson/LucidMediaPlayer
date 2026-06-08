@@ -4,6 +4,7 @@ import {
     TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
     ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
     ResizeVideo, SetVolume, GetSeekThumbnailData,
+    GetPreferences, SavePreferences, StartSeekThumbnailGeneration, RegenerateSeekThumbnails,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
@@ -12,9 +13,12 @@ import HomeScreen from './components/HomeScreen';
 import PassionPlayerWrapper from './components/PassionPlayerWrapper';
 import DebugPage from './components/DebugPage';
 import ChangelogPage from './components/ChangelogPage';
+import Notification from './components/Notification';
+import WorkingIndicator from './components/WorkingIndicator';
+import PreferencesPage from './components/PreferencesPage';
 
-// Each tab: { id, type: 'video'|'debug'|'changelog', title }
-const PAGE_TITLES = { debug: 'Debug', changelog: 'Changelog' };
+// Each tab: { id, type: 'video'|'debug'|'changelog'|'preferences', title }
+const PAGE_TITLES = { debug: 'Debug', changelog: 'Changelog', preferences: 'Preferences' };
 
 function App() {
     const [tabs, setTabs] = useState([]);
@@ -26,9 +30,14 @@ function App() {
     const [isDragging, setIsDragging] = useState(false);
     const [recentFiles, setRecentFiles] = useState([]);
     const [seekThumbs, setSeekThumbs] = useState(null);
+    const [notification, setNotification] = useState(null);
+    const [isWorking, setIsWorking] = useState(false);
+    const [preferences, setPreferences] = useState({ autogenerateSeekThumbs: false });
 
     // Stack of recently closed tabs for Ctrl+Shift+T reopen
     const closedTabsRef = useRef([]);
+    const notifTimerRef = useRef(null);
+    const promptDelayRef = useRef(null);
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
 
@@ -52,6 +61,7 @@ function App() {
     useEffect(() => {
         GetVersion().then(setVersion).catch(() => {});
         GetRecentFiles().then(setRecentFiles).catch(() => {});
+        GetPreferences().then(setPreferences).catch(() => {});
 
         const offDebugLog = EventsOn('debug-log', (payload) => {
             debugLog(payload?.source ?? 'go', payload?.message ?? String(payload));
@@ -98,26 +108,63 @@ function App() {
         return () => clearInterval(id);
     }, [activeTabId, activeTab?.type]);
 
-    // Load seek thumbnails on tab switch, and listen for generation-complete events.
+    // Load seek thumbnails on tab switch, and listen for generation events.
     useEffect(() => {
         if (!activeTabId || activeTab?.type !== 'video') {
             setSeekThumbs(null);
+            setNotification(null);
+            setIsWorking(false);
+            clearTimeout(notifTimerRef.current);
+            clearTimeout(promptDelayRef.current);
             return;
         }
+
         // Immediate check: thumbnails may already be cached from a previous visit.
         GetSeekThumbnailData(activeTabId).then(d => {
-            setSeekThumbs(d?.ready ? { vtt: d.vtt, spritesheetBase64: d.spritesheetBase64 } : null);
+            if (d?.ready) {
+                setSeekThumbs({ vtt: d.vtt, spritesheetBase64: d.spritesheetBase64 });
+            } else {
+                setSeekThumbs(null);
+                if (!preferences.autogenerateSeekThumbs) {
+                    // Delay prompt to allow hash+thumbnail check to complete first
+                    // (e.g. renamed file whose hash points to existing thumbnails).
+                    promptDelayRef.current = setTimeout(() => {
+                        setNotification({ type: 'prompt', message: 'Press F5 to generate seek thumbnails' });
+                        notifTimerRef.current = setTimeout(() => setNotification(null), 2000);
+                    }, 1500);
+                }
+            }
         }).catch(() => setSeekThumbs(null));
 
-        // Listen for the event Go emits when background generation finishes.
-        const off = EventsOn('seek-thumbs-ready', (tabID) => {
+        const offGenerating = EventsOn('seek-thumbs-generating', (tabID) => {
             if (tabID !== activeTabId) return;
+            clearTimeout(notifTimerRef.current);
+            clearTimeout(promptDelayRef.current);
+            setIsWorking(true);
+            setNotification({ type: 'generating', message: 'Generating seek thumbnails...' });
+            notifTimerRef.current = setTimeout(() => setNotification(null), 2000);
+        });
+
+        const offReady = EventsOn('seek-thumbs-ready', (tabID) => {
+            if (tabID !== activeTabId) return;
+            clearTimeout(notifTimerRef.current);
+            clearTimeout(promptDelayRef.current);
+            setIsWorking(false);
+            setNotification({ type: 'done', message: 'Seek thumbnails ready!' });
+            notifTimerRef.current = setTimeout(() => setNotification(null), 2000);
             GetSeekThumbnailData(tabID).then(d => {
                 if (d?.ready) setSeekThumbs({ vtt: d.vtt, spritesheetBase64: d.spritesheetBase64 });
             }).catch(() => {});
         });
-        return () => off?.();
-    }, [activeTabId, activeTab?.type]);
+
+        return () => {
+            offGenerating?.();
+            offReady?.();
+            clearTimeout(notifTimerRef.current);
+            clearTimeout(promptDelayRef.current);
+            setIsWorking(false);
+        };
+    }, [activeTabId, activeTab?.type, preferences.autogenerateSeekThumbs]);
 
     useEffect(() => {
         const id = setInterval(() => {
@@ -224,6 +271,11 @@ function App() {
         SetVolume(activeTabId, vol).catch(console.error);
     }, [activeTabId]);
 
+    const handleSavePreferences = useCallback((prefs) => {
+        SavePreferences(prefs).catch(console.error);
+        setPreferences(prefs);
+    }, []);
+
     useEffect(() => {
         const onKey = (e) => {
             const tag = document.activeElement?.tagName;
@@ -245,6 +297,18 @@ function App() {
                 ToggleFullscreen().catch(console.error);
             }
             if (e.code === 'F3') { e.preventDefault(); openPageTab('debug'); }
+            if (e.code === 'F5' && isVideo) {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    RegenerateSeekThumbnails(activeTabId).catch(console.error);
+                } else {
+                    StartSeekThumbnailGeneration(activeTabId).catch(console.error);
+                }
+            }
+            if (e.ctrlKey && e.code === 'KeyO' && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                handleOpenFile();
+            }
             if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') {
                 const text = getDebugLogs().map(e => `${e.time} [${e.source}] ${e.message}`).join('\n');
                 navigator.clipboard.writeText(text).catch(() => {});
@@ -315,7 +379,7 @@ function App() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [activeTabId, activeTab, tabs, isFullscreen, info, handleCloseTab, handleSwitchTab, handleTogglePlayback, openPageTab, openVideoPath, setTabs]);
+    }, [activeTabId, activeTab, tabs, isFullscreen, info, handleCloseTab, handleSwitchTab, handleTogglePlayback, handleOpenFile, openPageTab, openVideoPath, setTabs]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
@@ -329,6 +393,7 @@ function App() {
                     onOpenFile={handleOpenFile}
                     onOpenDebug={() => openPageTab('debug')}
                     onOpenChangelog={() => openPageTab('changelog')}
+                    onOpenPreferences={() => openPageTab('preferences')}
                     onReorder={handleReorderTab}
                     recentFiles={recentFiles}
                     onOpenRecent={openVideoPath}
@@ -337,19 +402,28 @@ function App() {
                 />
             )}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-                {!activeTabId && <HomeScreen version={version} isDragging={isDragging} onOpenChangelog={() => openPageTab('changelog')} />}
+                {!activeTabId && (
+                    <HomeScreen version={version} isDragging={isDragging} onOpenChangelog={() => openPageTab('changelog')} />
+                )}
                 {activeTab?.type === 'video' && (
-                    <PassionPlayerWrapper
-                        info={info}
-                        seekThumbs={seekThumbs}
-                        onTogglePlayback={handleTogglePlayback}
-                        onSeek={(pos) => Seek(activeTabId, pos).catch(console.error)}
-                        onFullscreen={() => ToggleFullscreen().catch(console.error)}
-                        onVolumeChange={handleVolumeChange}
-                    />
+                    <>
+                        <PassionPlayerWrapper
+                            info={info}
+                            seekThumbs={seekThumbs}
+                            onTogglePlayback={handleTogglePlayback}
+                            onSeek={(pos) => Seek(activeTabId, pos).catch(console.error)}
+                            onFullscreen={() => ToggleFullscreen().catch(console.error)}
+                            onVolumeChange={handleVolumeChange}
+                        />
+                        <Notification notification={notification} />
+                        <WorkingIndicator active={isWorking} />
+                    </>
                 )}
                 {activeTab?.type === 'debug' && <DebugPage />}
                 {activeTab?.type === 'changelog' && <ChangelogPage />}
+                {activeTab?.type === 'preferences' && (
+                    <PreferencesPage preferences={preferences} onSave={handleSavePreferences} />
+                )}
             </div>
         </div>
     );

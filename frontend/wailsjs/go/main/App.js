@@ -26,6 +26,10 @@ export function GetPlaybackInfo(arg1) {
   return window['go']['main']['App']['GetPlaybackInfo'](arg1);
 }
 
+export function GetPreferences() {
+  return window['go']['main']['App']['GetPreferences']();
+}
+
 export function GetRecentFiles() {
   return window['go']['main']['App']['GetRecentFiles']();
 }
@@ -46,8 +50,16 @@ export function OpenVideo(arg1) {
   return window['go']['main']['App']['OpenVideo'](arg1);
 }
 
+export function RegenerateSeekThumbnails(arg1) {
+  return window['go']['main']['App']['RegenerateSeekThumbnails'](arg1);
+}
+
 export function ResizeVideo() {
   return window['go']['main']['App']['ResizeVideo']();
+}
+
+export function SavePreferences(arg1) {
+  return window['go']['main']['App']['SavePreferences'](arg1);
 }
 
 export function Seek(arg1, arg2) {
@@ -56,6 +68,10 @@ export function Seek(arg1, arg2) {
 
 export function SetVolume(arg1, arg2) {
   return window['go']['main']['App']['SetVolume'](arg1, arg2);
+}
+
+export function StartSeekThumbnailGeneration(arg1) {
+  return window['go']['main']['App']['StartSeekThumbnailGeneration'](arg1);
 }
 
 export function SwitchTab(arg1) {

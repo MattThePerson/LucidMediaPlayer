@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.1.16] — 2026-06-08
+- Fix: F5 now correctly generates seek thumbnails — `StartSeekThumbnailGeneration` was being blocked by the autogenerate gate; added `manualTrigger` flag to `ensureThumbnails` to bypass pref for explicit user actions
+- Fix: removed video controls overlay from home screen
+- Fix: flares no longer trigger playback toggle on click (`pointer-events: auto` + `stopPropagation`)
+- Fix: flares slide back up on dismiss (slide-up exit animation, managed in Notification component)
+- Fix: flare dismiss timeout reduced to 2s
+- Add: WorkingIndicator enlarged (18px), more visible, `pointer-events: auto` so `title` tooltip shows on hover
+- Add: home screen shortcut hint text larger and clearer
+
+## [0.1.15] — 2026-06-08
+- Fix: F5 generates seek thumbnails only if not yet generated; Shift+F5 always regenerates
+- Fix: flare (notification popup) properly centered using `margin: 0 auto` (was broken by transform conflict with slideDown animation)
+- Fix: flares now have full-border color glow per type instead of left-border only
+- Fix: WorkingIndicator is now a single-color subtle ring (was too colorful)
+- Fix: "Generating..." flare auto-dismisses after 3s and has no spinner (WorkingIndicator handles background state)
+- Add: WorkingIndicator has HTML title describing what's happening
+- Add: Ctrl+O opens file picker (keyboard shortcut + dropdown item shows "Ctrl+O" right-aligned)
+- Add: home screen shows "Ctrl+O — Open video" hint below version
+
+## [0.1.14] — 2026-06-08
+- Add: videos start playing on open; `--loop-file=inf` added to mpv (loop on by default)
+- Fix: F5 on a video with existing thumbnails shows "exists — Shift+F5 to regenerate" instead of starting generation; Shift+F5 force-regenerates
+- Fix: renamed video no longer shows "Press F5" prompt when thumbnails already exist (prompt delayed 1.5s, `ensureThumbnails` always emits `seek-thumbs-ready` on cache hit)
+- Fix: recently-opened menu filters out files that no longer exist on disk
+- Add: colorful rainbow spinning `WorkingIndicator` in video area top-right during background generation
+- Add: notification popups now have type-specific accent colors (blue/amber/green/violet)
+- Add: notification popup centered horizontally in video area
+- Add: video controls overlay on home screen for visual testing
+- Fix: `ensureThumbnails` skips duration poll on cache hits (immediate cache-hit notify)
+
+## [0.1.13] — 2026-06-08
+- Add: F5 triggers manual seek thumbnail generation (autogenerate defaults to OFF)
+- Add: slide-down notification popup — "Press F5" prompt (3s), "Generating..." spinner, "Seek thumbnails ready!" (3s)
+- Add: Preferences page (hamburger → Preferences) with "Autogenerate seek thumbnails" toggle
+- Add: debug logging in thumbnail generation — ffmpeg path, frame count, ok/total, spritesheet KB
+- Add: `StartSeekThumbnailGeneration`, `GetPreferences`, `SavePreferences` Wails methods
+- Add: `seek-thumbs-generating` event emitted before generation begins; cache hits skip spinner
+
 ## [0.1.12] — 2026-06-08
 - Add: seek thumbnail hover preview — ffmpeg fast-seek generates a 100-frame spritesheet cached per video hash in `%APPDATA%\LucidPlayer\media\<hash>\`
 - Add: `setSeekThumbs(vtt, dataURL)` data-push API on PassionPlayer (replaces URL/fetch path); Go reads and base64-encodes files, no HTTP server needed
