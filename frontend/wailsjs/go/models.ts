@@ -20,6 +20,7 @@ export namespace main {
 	}
 	export class Preferences {
 	    autogenerateSeekThumbs: boolean;
+	    openInExistingInstance: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Preferences(source);
@@ -28,6 +29,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.autogenerateSeekThumbs = source["autogenerateSeekThumbs"];
+	        this.openInExistingInstance = source["openInExistingInstance"];
 	    }
 	}
 	export class RecentEntry {

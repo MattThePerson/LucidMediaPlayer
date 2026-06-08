@@ -32,7 +32,7 @@ function App() {
     const [seekThumbs, setSeekThumbs] = useState(null);
     const [notification, setNotification] = useState(null);
     const [isWorking, setIsWorking] = useState(false);
-    const [preferences, setPreferences] = useState({ autogenerateSeekThumbs: false });
+    const [preferences, setPreferences] = useState({ autogenerateSeekThumbs: false, openInExistingInstance: false });
 
     // Stack of recently closed tabs for Ctrl+Shift+T reopen
     const closedTabsRef = useRef([]);
@@ -67,6 +67,7 @@ function App() {
             debugLog(payload?.source ?? 'go', payload?.message ?? String(payload));
         });
         const offFullscreen = EventsOn('fullscreen-changed', setIsFullscreen);
+        const offOpenFile = EventsOn('open-file', openVideoPath);
 
         // JS-side OnFileDrop is the correct Wails v2 API for WebView2 file drops.
         // Go's runtime.OnFileDrop only works for Win32-level drops and never fires here.
@@ -91,6 +92,7 @@ function App() {
         return () => {
             offDebugLog?.();
             offFullscreen?.();
+            offOpenFile?.();
             OnFileDropOff();
             window.removeEventListener('dragenter', onDragEnter);
             window.removeEventListener('dragover', onDragOver);

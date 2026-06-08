@@ -2,6 +2,8 @@ package main
 
 import (
 	"embed"
+	"os"
+	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -13,7 +15,23 @@ import (
 var assets embed.FS
 
 func main() {
+	// Parse the file path from "Open with" or file association launch.
+	var startupFile string
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
+		startupFile = os.Args[1]
+	}
+
+	// If the user has opted into single-instance mode and there's already an
+	// instance running, hand the file off to it and exit immediately.
+	if startupFile != "" {
+		prefs := loadPreferences()
+		if prefs.OpenInExistingInstance && trySendToExistingInstance(startupFile) {
+			return
+		}
+	}
+
 	app := NewApp()
+	app.startupFile = startupFile
 
 	err := wails.Run(&options.App{
 		Title:  "Lucid Player",

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.17] — 2026-06-08
+- Add: "Open with" now works — file path passed via `os.Args[1]` is opened as a video tab on startup
+- Add: "Open files in existing window" preference — when enabled, "Open with" sends the file to an already-running instance via a named pipe instead of launching a new window
+
 ## [0.1.16] — 2026-06-08
 - Fix: F5 now correctly generates seek thumbnails — `StartSeekThumbnailGeneration` was being blocked by the autogenerate gate; added `manualTrigger` flag to `ensureThumbnails` to bypass pref for explicit user actions
 - Fix: removed video controls overlay from home screen

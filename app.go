@@ -36,6 +36,7 @@ var (
 	getMonitorInfoW     = modUser32.NewProc("GetMonitorInfoW")
 	setWindowLongPtrW   = modUser32.NewProc("SetWindowLongPtrW")
 	callWindowProcW     = modUser32.NewProc("CallWindowProcW")
+	setForegroundWindow = modUser32.NewProc("SetForegroundWindow")
 )
 
 const (
@@ -180,6 +181,7 @@ type App struct {
 	savedWindowStyle uint32
 	savedWindowRect  winRECT
 	prefs            Preferences
+	startupFile      string // file path from os.Args[1], opened after DOM is ready
 }
 
 func NewApp() *App {
@@ -194,6 +196,10 @@ func (a *App) startup(ctx context.Context) {
 	} else {
 		a.emitDebug("db", "db opened")
 	}
+	go startInstanceServer(func(path string) {
+		runtime.EventsEmit(a.ctx, "open-file", path)
+		a.bringWindowToFront()
+	})
 }
 
 func (a *App) onDomReady(ctx context.Context) {
@@ -210,6 +216,11 @@ func (a *App) onDomReady(ctx context.Context) {
 	}
 	a.parentHWND = hwnd
 	a.emitDebug("startup", fmt.Sprintf("parentHWND=%d — ready", hwnd))
+
+	if a.startupFile != "" {
+		runtime.EventsEmit(ctx, "open-file", a.startupFile)
+		a.startupFile = ""
+	}
 
 	// Subclass the window procedure to suppress Alt-key system menu (SC_KEYMENU).
 	// This prevents Alt+Space from opening the Win32 system menu and allows
@@ -887,6 +898,14 @@ func waitForNewChildHWND(parent uintptr, before []uintptr, timeout time.Duration
 		time.Sleep(50 * time.Millisecond)
 	}
 	return 0
+}
+
+func (a *App) bringWindowToFront() {
+	if a.parentHWND == 0 {
+		return
+	}
+	showWindowW.Call(a.parentHWND, uintptr(9)) // SW_RESTORE
+	setForegroundWindow.Call(a.parentHWND)
 }
 
 func setWindowVisibility(hwnd uintptr, visible bool) {

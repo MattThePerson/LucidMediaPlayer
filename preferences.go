@@ -10,6 +10,7 @@ import (
 // %APPDATA%\LucidPlayer\config\preferences.json.
 type Preferences struct {
 	AutogenerateSeekThumbs bool `json:"autogenerateSeekThumbs"`
+	OpenInExistingInstance bool `json:"openInExistingInstance"`
 }
 
 func configDir() (string, error) {
