@@ -6,10 +6,10 @@ import {
     ResizeVideo,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
-import { debugLog } from './debug';
+import { debugLog, getDebugLogs } from './debug';
 import TabBar from './components/TabBar';
 import HomeScreen from './components/HomeScreen';
-import VideoControls from './components/VideoControls';
+import PassionPlayerWrapper from './components/PassionPlayerWrapper';
 import DebugPage from './components/DebugPage';
 import ChangelogPage from './components/ChangelogPage';
 
@@ -191,6 +191,11 @@ function App() {
                 handleTogglePlayback();
             }
             if (e.code === 'KeyF') ToggleFullscreen().catch(console.error);
+            if (e.code === 'F3') { e.preventDefault(); openPageTab('debug'); }
+            if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') {
+                const text = getDebugLogs().map(e => `${e.time} [${e.source}] ${e.message}`).join('\n');
+                navigator.clipboard.writeText(text).catch(() => {});
+            }
             if (e.ctrlKey && e.code === 'KeyW' && activeTabId) {
                 e.preventDefault();
                 handleCloseTab(activeTabId);
@@ -218,7 +223,7 @@ function App() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [activeTabId, activeTab, tabs, handleCloseTab, handleSwitchTab, handleTogglePlayback, setTabs]);
+    }, [activeTabId, activeTab, tabs, handleCloseTab, handleSwitchTab, handleTogglePlayback, openPageTab, setTabs]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
@@ -241,11 +246,11 @@ function App() {
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
                 {!activeTabId && <HomeScreen version={version} isDragging={isDragging} onOpenChangelog={() => openPageTab('changelog')} />}
                 {activeTab?.type === 'video' && (
-                    <VideoControls
+                    <PassionPlayerWrapper
                         info={info}
                         onTogglePlayback={handleTogglePlayback}
                         onSeek={(pos) => Seek(activeTabId, pos).catch(console.error)}
-                        onDoubleClick={() => ToggleFullscreen().catch(console.error)}
+                        onFullscreen={() => ToggleFullscreen().catch(console.error)}
                     />
                 )}
                 {activeTab?.type === 'debug' && <DebugPage />}

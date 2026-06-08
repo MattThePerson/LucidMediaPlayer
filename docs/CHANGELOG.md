@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.18] — 2026-06-08
+- Fix black video: PassionPlayer background was opaque black, blocking mpv HWND window
+- Fix second-tab controls first tab: ref-based callbacks in PassionPlayerWrapper so the long-lived PassionPlayer instance always calls the current tab's functions
+- F3 opens Debug tab
+- Ctrl+Shift+C copies all debug log entries to clipboard
+
+## [0.0.17] — 2026-06-07
+- Replace VideoControls with PassionPlayer (pure-JS, no jQuery, Shadow DOM)
+- PassionPlayer supports headless mode: external play/pause/seek/fullscreen callbacks + `setState()` for mpv state injection
+- PassionPlayer accepts `hostEl` for React ref mounting; `disable_keybinds` option for host-managed shortcuts
+- PassionPlayer.css served from `frontend/public/` at `/PassionPlayer.css`
+
 ## [0.0.16] — 2026-06-07
 - Increase resize debounce from 16ms to 200ms to eliminate MoveWindow spam during drag
 

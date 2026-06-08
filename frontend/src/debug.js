@@ -23,6 +23,8 @@ export function clearDebugLogs() {
     listeners.forEach(cb => cb());
 }
 
+export function getDebugLogs() { return logs; }
+
 export function useDebugLogs() {
     return useSyncExternalStore(subscribe, getSnapshot);
 }

@@ -215,7 +215,9 @@ The reader goroutine (`tab.startReader()`) updates `tab.timePos`, `tab.duration`
 |---|---|
 | `Space` | Toggle playback (active video tab only) |
 | `F` | Toggle fullscreen |
+| `F3` | Open Debug tab |
 | `Ctrl+W` | Close active tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Cycle tabs |
 | `Ctrl+Shift+PageUp/Down` | Move active tab left/right |
+| `Ctrl+Shift+C` | Copy all debug log entries to clipboard |
 | Middle-click tab | Close tab |
