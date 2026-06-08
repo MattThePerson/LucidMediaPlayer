@@ -141,18 +141,22 @@ func SavePosition(id int64, pos float64) error {
 	return err
 }
 
-// GetRecents returns up to limit recently-opened entries ordered by last_opened DESC.
+// GetRecents returns all recently-opened entries ordered by last_opened DESC.
+// If limit > 0 the result is capped to that many rows.
 func GetRecents(limit int) ([]RecentEntry, error) {
 	if gDB == nil {
 		return []RecentEntry{}, nil
 	}
-	rows, err := gDB.Query(`
+	query := `
 		SELECT filepath, COALESCE(last_opened,'')
 		FROM videos
 		WHERE filepath IS NOT NULL AND last_opened IS NOT NULL
 		ORDER BY last_opened DESC
-		LIMIT ?
-	`, limit)
+	`
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := gDB.Query(query)
 	if err != nil {
 		return nil, err
 	}

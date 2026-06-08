@@ -21,6 +21,7 @@ export class PassionPlayer {
         onSeek = null, // (fraction: 0–1) => void
         onFullscreen = null, // () => void — override native fullscreen
         onVolumeChange = null, // (volume: 0–100) => void
+        onUIVisible = null,   // (visible: bool) => void — fires when controls show/hide
     }) {
         this.player_id = player_id;
         this.src = src;
@@ -41,6 +42,7 @@ export class PassionPlayer {
         this.onSeek = onSeek;
         this.onFullscreen = onFullscreen;
         this.onVolumeChange = onVolumeChange;
+        this.onUIVisible = onUIVisible;
 
         this.root_element = null;
         this.shadow = null;
@@ -131,6 +133,7 @@ export class PassionPlayer {
 
     destroy() {
         this._destroyed = true;
+        this.onUIVisible?.(false);
         clearTimeout(this._hideTimer);
         if (this._keydownHandler) {
             document.removeEventListener("keydown", this._keydownHandler);
@@ -337,6 +340,7 @@ export class PassionPlayer {
         if (controls) { controls.style.transitionDuration = "0ms"; controls.style.opacity = "1"; }
         if (progress) { progress.style.transitionDuration = "0ms"; progress.style.opacity = "1"; }
         if (player) player.style.cursor = "";
+        this.onUIVisible?.(true);
     }
 
     _hideControls() {
@@ -346,6 +350,7 @@ export class PassionPlayer {
         if (controls) { controls.style.transitionDuration = "500ms"; controls.style.opacity = "0"; }
         if (progress) { progress.style.transitionDuration = "500ms"; progress.style.opacity = "0"; }
         if (player) player.style.cursor = "none";
+        this.onUIVisible?.(false);
     }
 
     // ====================================================================================================

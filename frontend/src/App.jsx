@@ -36,6 +36,7 @@ function App() {
     const [notification, setNotification] = useState(null);
     const [isWorking, setIsWorking] = useState(false);
     const [recentOverlayOpen, setRecentOverlayOpen] = useState(false);
+    const [videoUIVisible, setVideoUIVisible] = useState(false);
     const [preferences, setPreferences] = useState({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false });
     // playlists: { [playlistTabId]: { items, selectedIndex, currentIndex, random, videoTabId, playedIndices } }
     const [playlists, setPlaylists] = useState({});
@@ -55,6 +56,8 @@ function App() {
     preferencesRef.current = preferences;
     const infoRef = useRef(info);
     infoRef.current = info;
+    const tabsStateRef = useRef(tabsState);
+    tabsStateRef.current = tabsState;
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
     activeTabRef.current = activeTab;
@@ -205,7 +208,9 @@ function App() {
         try {
             const folder = await OpenFolderPicker();
             if (!folder) return;
+            debugLog('OpenFolderAsPlaylist', 'folder: ' + folder);
             const files = await GetMediaFilesInFolder(folder);
+            debugLog('OpenFolderAsPlaylist', `found ${files?.length ?? 0} files`);
             if (!files?.length) return;
             openNewPlaylist(files);
         } catch (e) {
@@ -398,7 +403,10 @@ function App() {
                 curTab?.type === 'video' ? activeTabId :
                 curTab?.type === 'playlist' ? (playlists[activeTabId]?.videoTabId ?? null) :
                 null;
-            if (curVidId && !infoRef.current.paused) {
+            // Use tabsStateRef (updated within 50ms of any toggle) to avoid
+            // acting on stale infoRef state when the user recently paused manually.
+            const isPlaying = tabsStateRef.current?.[curVidId] ?? !infoRef.current.paused;
+            if (curVidId && isPlaying) {
                 TogglePlayback(curVidId).catch(console.error);
                 autoPausedTabIdRef.current = activeTabId;
             }
@@ -550,7 +558,7 @@ function App() {
                 e.preventDefault();
                 handleTogglePlayback();
             }
-            if (e.code === 'KeyF') ToggleFullscreen().catch(console.error);
+            if (e.code === 'KeyF' && isVideoActive) ToggleFullscreen().catch(console.error);
             if (e.code === 'Escape') {
                 if (isFullscreen) {
                     e.preventDefault();
@@ -570,7 +578,7 @@ function App() {
                 }
             }
 
-            // N / P — next/previous in playlist
+            // N / P — next/previous in playlist (play)
             if (e.code === 'KeyN' && !e.ctrlKey && !e.altKey && !e.shiftKey && isPlaylistPlaying) {
                 e.preventDefault();
                 handlePlaylistNext(activeTabId);
@@ -578,6 +586,24 @@ function App() {
             if (e.code === 'KeyP' && !e.ctrlKey && !e.altKey && !e.shiftKey && isPlaylistPlaying) {
                 e.preventDefault();
                 handlePlaylistPrev(activeTabId);
+            }
+
+            // Ctrl+N / Ctrl+P — move selection in playlist list
+            if (e.ctrlKey && e.code === 'KeyN' && !e.shiftKey && !e.altKey && activeTab?.type === 'playlist') {
+                e.preventDefault();
+                const pls = playlistsRef.current[activeTabId];
+                if (pls?.items?.length > 0) {
+                    const next = Math.min((pls.selectedIndex < 0 ? -1 : pls.selectedIndex) + 1, pls.items.length - 1);
+                    setPlaylists(prev => ({ ...prev, [activeTabId]: { ...prev[activeTabId], selectedIndex: next } }));
+                }
+            }
+            if (e.ctrlKey && e.code === 'KeyP' && !e.shiftKey && !e.altKey && activeTab?.type === 'playlist' && !chordActiveRef.current) {
+                e.preventDefault();
+                const pls = playlistsRef.current[activeTabId];
+                if (pls?.items?.length > 0) {
+                    const next = Math.max((pls.selectedIndex < 0 ? 0 : pls.selectedIndex) - 1, 0);
+                    setPlaylists(prev => ({ ...prev, [activeTabId]: { ...prev[activeTabId], selectedIndex: next } }));
+                }
             }
 
             if (e.ctrlKey && e.code === 'KeyR' && !e.shiftKey && !e.altKey) {
@@ -710,6 +736,7 @@ function App() {
                         version={version}
                         isDragging={isDragging}
                         onOpenChangelog={() => openPageTab('changelog')}
+                        onOpenFile={handleOpenFile}
                         onOpenFolderAsPlaylist={openFolderAsPlaylist}
                         onNewPlaylist={openNewPlaylist}
                     />
@@ -723,12 +750,13 @@ function App() {
                             onSeek={(pos) => Seek(effectiveVideoTabId, pos).catch(console.error)}
                             onFullscreen={() => ToggleFullscreen().catch(console.error)}
                             onVolumeChange={handleVolumeChange}
+                            onUIVisible={setVideoUIVisible}
                             clickToTogglePlayback={preferences.clickToTogglePlayback}
                         />
                         {activeTab?.type === 'video' && <Notification notification={notification} />}
                         {isPlaylistPlaying && (
                             <button
-                                className="playlist-close-video-btn"
+                                className={`playlist-close-video-btn${videoUIVisible ? ' visible' : ''}`}
                                 onClick={handlePlaylistCloseVideo}
                                 title="Close video (Esc)"
                             >✕</button>

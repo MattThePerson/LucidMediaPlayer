@@ -764,10 +764,10 @@ func (a *App) ResizeVideo() {
 	platformResizeVideo(a)
 }
 
-// GetRecentFiles returns up to 10 recently-opened paths from the DB,
+// GetRecentFiles returns all recently-opened paths from the DB,
 // filtered to only include files that currently exist on disk.
 func (a *App) GetRecentFiles() []db.RecentEntry {
-	entries, err := db.GetRecents(10)
+	entries, err := db.GetRecents(0)
 	if err != nil {
 		a.emitDebug("db", "GetRecentFiles error: "+err.Error())
 		return []db.RecentEntry{}

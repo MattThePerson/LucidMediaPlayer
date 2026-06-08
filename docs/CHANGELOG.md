@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.25] — 2026-06-08
+- Fix: tab playing indicator no longer causes layout shift (space always reserved; indicator opacity-toggled)
+- Add: app opens maximized on launch
+- Fix: home screen app icon now works in production builds (inline SVG replaces broken PNG path)
+- Fix: "Open video" on home screen is now clickable and hoverable
+- Fix: F key does not toggle fullscreen when on a playlist tab with no active video
+- Add: recently opened overlay shows all recents (no 10-item cap); scrollable
+- Add: Ctrl+N/P changes playlist selection when a playlist tab is active
+
+## [0.1.24] — 2026-06-08
+- Fix: oneVideoAtATime — switching back to Tab A now correctly auto-resumes even if Tab B was manually paused (uses tabsState for more accurate playback detection)
+- Fix: playlist arrow keys now work immediately without needing to click the list first (auto-focus on mount)
+- Fix: tab playing indicator no longer overlaps tab title (added left padding)
+- Add: playlist close video button moved to top-right, styled red, fades with video controls
+- Change: home screen shortcuts use two-column layout (keybinds right-aligned, labels left-aligned)
+- Add: underline hover on clickable home screen shortcuts
+- Change: hamburger dropdown wider (270px), no text wrap, shorter item height
+- Change: recent files overlay items are smaller; path color slightly more visible
+- Add: debug logging for Open Folder as Playlist (visible in Debug tab)
+
 ## [0.1.23] — 2026-06-08
 - Change: "Recently Opened" is now a fuzzy-find overlay (VS Code style) instead of a submenu
 - Add: Ctrl+R keybind opens the recent files overlay

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 
 export default function PlaylistPage({
     playlist,
@@ -12,6 +12,8 @@ export default function PlaylistPage({
     const listRef = useRef(null);
     const draggedIdxRef = useRef(null);
     const [dragOverIdx, setDragOverIdx] = useState(null);
+
+    useEffect(() => { listRef.current?.focus(); }, []);
 
     const { items = [], selectedIndex = -1, currentIndex = -1, random = false } = playlist ?? {};
 

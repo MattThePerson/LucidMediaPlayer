@@ -52,13 +52,14 @@ body {
     border: 1px solid #383838;
     border-radius: 5px;
     box-shadow: 0 6px 20px #0009;
-    min-width: 220px;
+    min-width: 270px;
     z-index: 1000;
     padding: 4px 0;
+    white-space: nowrap;
 }
 
 .dropdown-item {
-    padding: 8px 16px;
+    padding: 5px 16px;
     color: #ccc;
     font-size: 13px;
     cursor: pointer;
@@ -127,7 +128,7 @@ body {
 .dropdown-item-clear:hover { color: #c06060; background: #2a2020; }
 
 .dropdown-item-with-version {
-    padding: 8px 16px;
+    padding: 5px 16px;
     color: #ccc;
     white-space: nowrap;
     cursor: pointer;
@@ -146,7 +147,7 @@ body {
 .dropdown-item-with-version:hover .dropdown-version { color: #888; }
 
 .dropdown-item-with-shortcut {
-    padding: 8px 16px;
+    padding: 5px 16px;
     color: #ccc;
     font-size: 13px;
     cursor: pointer;
@@ -182,7 +183,7 @@ body {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 0 8px 0 10px;
+    padding: 0 8px 0 18px; /* always reserve left space for the play indicator */
     flex: 1 1 0;
     min-width: 60px;
     max-width: 200px;
@@ -208,7 +209,8 @@ body {
     50% { opacity: 0.35; }
 }
 
-.tab-is-playing::before {
+/* The indicator is always rendered but invisible; becomes visible when playing */
+.tab::before {
     content: '';
     position: absolute;
     left: 5px;
@@ -219,6 +221,11 @@ body {
     background: rgba(215, 215, 215, 0.65);
     clip-path: polygon(0 0, 100% 50%, 0 100%);
     pointer-events: none;
+    opacity: 0;
+}
+
+.tab-is-playing::before {
+    opacity: 1;
 }
 
 .tab-name {
@@ -288,21 +295,20 @@ body {
 
 .home-shortcuts {
     margin-top: 14px;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: max-content max-content;
+    justify-content: center;
+    column-gap: 12px;
+    row-gap: 6px;
     align-items: center;
-    gap: 5px;
 }
 
 .home-shortcut-hint {
-    font-size: 13px;
-    color: #5a5a5a;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    display: contents;
 }
 
-.home-shortcut-hint kbd {
+.home-shortcuts kbd {
+    justify-self: end;
     font-family: 'Consolas', monospace;
     font-size: 11px;
     background: #1e1e1e;
@@ -312,6 +318,12 @@ body {
     padding: 2px 7px;
     color: #6a6a6a;
     letter-spacing: 0.03em;
+}
+
+.home-shortcuts span {
+    font-size: 13px;
+    color: #5a5a5a;
+    justify-self: start;
 }
 
 /* drag-over overlay */
@@ -755,11 +767,11 @@ body {
 .playlist-close-video-btn {
     position: absolute;
     top: 10px;
-    left: 10px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    right: 10px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 80, 80, 0.25);
     border-radius: 6px;
-    color: rgba(255, 255, 255, 0.65);
+    color: rgba(255, 100, 100, 0.85);
     width: 28px;
     height: 28px;
     font-size: 12px;
@@ -768,11 +780,16 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0.35;
-    transition: background 150ms, opacity 150ms;
+    opacity: 0;
+    transition: background 150ms, opacity 500ms;
+}
+.playlist-close-video-btn.visible {
+    opacity: 1;
 }
 .playlist-close-video-btn:hover {
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(160, 30, 30, 0.75);
+    border-color: rgba(255, 80, 80, 0.5);
+    color: white;
     opacity: 1;
 }
 
@@ -825,9 +842,9 @@ body {
 .recent-overlay-item {
     display: flex;
     flex-direction: column;
-    padding: 7px 16px;
+    padding: 4px 16px;
     cursor: pointer;
-    gap: 2px;
+    gap: 1px;
     border-bottom: 1px solid transparent;
 }
 .recent-overlay-item.selected { background: #1e3060; }
@@ -844,13 +861,13 @@ body {
 
 .recent-overlay-path {
     font-size: 11px;
-    color: #484848;
+    color: #585858;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     font-family: 'Consolas', monospace;
 }
-.recent-overlay-item.selected .recent-overlay-path { color: #6080b0; }
+.recent-overlay-item.selected .recent-overlay-path { color: #7090c0; }
 
 .recent-overlay-empty {
     padding: 20px 16px;
@@ -881,14 +898,13 @@ body {
 
 /* ── Home screen: clickable shortcut hints ────────────────────────────────── */
 
-.home-shortcut-hint.clickable {
+.home-shortcut-hint.clickable kbd,
+.home-shortcut-hint.clickable span {
     cursor: pointer;
-    border-radius: 5px;
-    padding: 3px 8px;
-    margin: 0 -8px;
-    transition: background 120ms;
 }
-.home-shortcut-hint.clickable:hover {
-    background: rgba(255, 255, 255, 0.05);
+.home-shortcut-hint.clickable span:hover {
     color: #7a7a7a;
+    text-decoration: underline;
+    text-decoration-color: #555;
+    text-underline-offset: 3px;
 }
