@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.22] — 2026-06-08
+- Add: video controls fade out (500ms) when cursor leaves or is idle for 2 seconds; cursor hides too
+- Add: "One video playing at a time" setting — switching tabs auto-pauses; switching back resumes
+- Add: close-video button (top-left overlay) when a playlist is playing; Escape also closes it
+- Add: Ctrl+K, Ctrl+P keybind to create a new playlist; added to home screen and dropdown
+- Add: open folder and new playlist shortcuts shown as clickable buttons on home screen
+- Fix: video controls (play/pause indicator, tab indicator) no longer push tab text on appear
+- Fix: tab playing indicator is now a subtle off-white play triangle (no layout shift)
+- Fix: backend loading spinner now vertically centered in the tab bar
+- Fix: volume no longer resets to 100 when scrolled to 0 (volume persists across tab switches)
+- Fix: Escape closes hamburger dropdown when open
+- Fix: Ctrl+Shift+T restores playlist with its original video items (session-persistent)
+- Change: dropdown order — Open File, Open Folder, New Playlist, then rest
+- Change: open folder keybind label corrected to "Ctrl+K, Ctrl+O"
+
 ## [0.1.21] — 2026-06-08
 - Refactor: cross-platform build — app now compiles on Linux/macOS; mpv runs standalone (no HWND embedding) with Unix socket IPC
 - Refactor: Win32 code extracted to `platform_windows.go`; Linux/macOS stubs in `platform_linux.go`

@@ -42,7 +42,6 @@ export default function PassionPlayerWrapper({ info, seekThumbs, onTogglePlaybac
             currentTime: info.time_pos,
             duration:    info.duration,
             paused:      info.paused,
-            volume:      info.volume,
         });
     }, [info]);
 

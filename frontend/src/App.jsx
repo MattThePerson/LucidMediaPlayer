@@ -43,11 +43,16 @@ function App() {
     const promptDelayRef = useRef(null);
     const chordActiveRef = useRef(false);
     const chordTimerRef = useRef(null);
+    const autoPausedTabIdRef = useRef(null);
     // Refs so event listeners with stale closures can reach current state
     const playlistsRef = useRef(playlists);
     playlistsRef.current = playlists;
     const activeTabRef = useRef(null);
     const activeTabIdRef = useRef(null);
+    const preferencesRef = useRef(preferences);
+    preferencesRef.current = preferences;
+    const infoRef = useRef(info);
+    infoRef.current = info;
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
     activeTabRef.current = activeTab;
@@ -141,7 +146,7 @@ function App() {
                         : [],
                 },
             }));
-            setInfo({ time_pos: 0, duration: 0, paused: false, volume: 100 });
+            setInfo({ time_pos: 0, duration: 0, paused: false });
         } catch (e) {
             debugLog('PlaylistPlay', 'ERROR: ' + e);
         }
@@ -206,6 +211,19 @@ function App() {
         }
     }, [openNewPlaylist]);
 
+    const handlePlaylistCloseVideo = useCallback(async () => {
+        const plsTabId = activeTabIdRef.current;
+        const pls = playlistsRef.current[plsTabId];
+        if (!pls?.videoTabId) return;
+        await CloseTab(pls.videoTabId);
+        setPlaylists(prev => ({
+            ...prev,
+            [plsTabId]: { ...prev[plsTabId], videoTabId: null },
+        }));
+        await SwitchTab('');
+        setInfo({ time_pos: 0, duration: 0, paused: true });
+    }, []);
+
     // ── Core callbacks ──────────────────────────────────────────────────────────
 
     const openVideoPath = useCallback(async (filePath) => {
@@ -217,7 +235,7 @@ function App() {
             setTabs(prev => [...prev, { id: tabId, type: 'video', title: filename, path: filePath }]);
             await SwitchTab(tabId);
             setActiveTabId(tabId);
-            setInfo({ time_pos: 0, duration: 0, paused: true, volume: 100 });
+            setInfo({ time_pos: 0, duration: 0, paused: true });
             GetRecentFiles().then(setRecentFiles).catch(() => {});
         } catch (e) {
             debugLog('OpenVideo', 'ERROR: ' + e);
@@ -370,13 +388,34 @@ function App() {
 
     const handleSwitchTab = useCallback(async (tabId) => {
         if (tabId === activeTabId) return;
+
+        // oneVideoAtATime: auto-pause current playing video
+        if (preferencesRef.current?.oneVideoAtATime) {
+            const curTab = activeTabRef.current;
+            const curVidId =
+                curTab?.type === 'video' ? activeTabId :
+                curTab?.type === 'playlist' ? (playlists[activeTabId]?.videoTabId ?? null) :
+                null;
+            if (curVidId && !infoRef.current.paused) {
+                TogglePlayback(curVidId).catch(console.error);
+                autoPausedTabIdRef.current = activeTabId;
+            }
+        }
+
         const tab = tabId ? tabs.find(t => t.id === tabId) : null;
         let goTabId = '';
         if (tab?.type === 'video') goTabId = tabId;
         else if (tab?.type === 'playlist') goTabId = playlists[tabId]?.videoTabId ?? '';
         await SwitchTab(goTabId);
         setActiveTabId(tabId ?? null);
-        if (!goTabId) setInfo({ time_pos: 0, duration: 0, paused: true, volume: 100 });
+        if (!goTabId) setInfo({ time_pos: 0, duration: 0, paused: true });
+
+        // oneVideoAtATime: resume if returning to auto-paused tab
+        if (preferencesRef.current?.oneVideoAtATime && tabId === autoPausedTabIdRef.current) {
+            autoPausedTabIdRef.current = null;
+            const vidId = tab?.type === 'video' ? tabId : playlists[tabId]?.videoTabId;
+            if (vidId) setTimeout(() => TogglePlayback(vidId).catch(console.error), 150);
+        }
     }, [activeTabId, tabs, playlists]);
 
     const handleCloseTab = useCallback(async (tabId) => {
@@ -384,7 +423,9 @@ function App() {
         const tab = tabs.find(t => t.id === tabId);
 
         if (tab) {
-            closedTabsRef.current.push({ type: tab.type, path: tab.path });
+            const entry = { type: tab.type, path: tab.path };
+            if (tab.type === 'playlist') entry.playlistItems = playlists[tabId]?.items ?? [];
+            closedTabsRef.current.push(entry);
         }
 
         if (tab?.type === 'video') {
@@ -405,7 +446,7 @@ function App() {
             else if (next?.type === 'playlist') nextGoTabId = playlists[next.id]?.videoTabId ?? '';
             await SwitchTab(nextGoTabId);
             setActiveTabId(next?.id ?? null);
-            if (!nextGoTabId) setInfo({ time_pos: 0, duration: 0, paused: true, volume: 100 });
+            if (!nextGoTabId) setInfo({ time_pos: 0, duration: 0, paused: true });
         }
     }, [tabs, activeTabId, playlists]);
 
@@ -503,9 +544,14 @@ function App() {
                 handleTogglePlayback();
             }
             if (e.code === 'KeyF') ToggleFullscreen().catch(console.error);
-            if (e.code === 'Escape' && isFullscreen) {
-                e.preventDefault();
-                ToggleFullscreen().catch(console.error);
+            if (e.code === 'Escape') {
+                if (isFullscreen) {
+                    e.preventDefault();
+                    ToggleFullscreen().catch(console.error);
+                } else if (activeTab?.type === 'playlist' && playlists[activeTabId]?.videoTabId) {
+                    e.preventDefault();
+                    handlePlaylistCloseVideo();
+                }
             }
             if (e.code === 'F3') { e.preventDefault(); openPageTab('debug'); }
             if (e.code === 'F5' && isVideo) {
@@ -537,6 +583,12 @@ function App() {
                     handleOpenFile();
                 }
             }
+            if (e.ctrlKey && e.code === 'KeyP' && !e.shiftKey && !e.altKey && chordActiveRef.current) {
+                e.preventDefault();
+                clearTimeout(chordTimerRef.current);
+                chordActiveRef.current = false;
+                openNewPlaylist();
+            }
             if (e.ctrlKey && e.code === 'Comma' && !e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 openPageTab('preferences');
@@ -556,7 +608,7 @@ function App() {
                 if (last.type === 'video' && last.path) {
                     openVideoPath(last.path);
                 } else if (last.type === 'playlist') {
-                    openNewPlaylist();
+                    openNewPlaylist(last.playlistItems ?? []);
                 } else if (last.type !== 'video') {
                     openPageTab(last.type);
                 }
@@ -616,7 +668,7 @@ function App() {
     }, [activeTabId, activeTab, tabs, isFullscreen, info, playlists,
         effectiveVideoTabId, handleCloseTab, handleSwitchTab, handleTogglePlayback,
         handleOpenFile, openPageTab, openVideoPath, openNewPlaylist, openFolderAsPlaylist,
-        handlePlaylistNext, handlePlaylistPrev, setTabs]);
+        handlePlaylistNext, handlePlaylistPrev, handlePlaylistCloseVideo, setTabs]);
 
     const isPlaylistPlaying = activeTab?.type === 'playlist' && !!playlists[activeTabId]?.videoTabId;
 
@@ -645,7 +697,13 @@ function App() {
             )}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
                 {!activeTabId && (
-                    <HomeScreen version={version} isDragging={isDragging} onOpenChangelog={() => openPageTab('changelog')} />
+                    <HomeScreen
+                        version={version}
+                        isDragging={isDragging}
+                        onOpenChangelog={() => openPageTab('changelog')}
+                        onOpenFolderAsPlaylist={openFolderAsPlaylist}
+                        onNewPlaylist={openNewPlaylist}
+                    />
                 )}
                 {(activeTab?.type === 'video' || isPlaylistPlaying) && (
                     <>
@@ -659,6 +717,13 @@ function App() {
                             clickToTogglePlayback={preferences.clickToTogglePlayback}
                         />
                         {activeTab?.type === 'video' && <Notification notification={notification} />}
+                        {isPlaylistPlaying && (
+                            <button
+                                className="playlist-close-video-btn"
+                                onClick={handlePlaylistCloseVideo}
+                                title="Close video (Esc)"
+                            >✕</button>
+                        )}
                     </>
                 )}
                 {activeTab?.type === 'playlist' && !isPlaylistPlaying && (

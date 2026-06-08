@@ -43,6 +43,7 @@ export namespace main {
 	    autogenerateSeekThumbs: boolean;
 	    openInExistingInstance: boolean;
 	    clickToTogglePlayback: boolean;
+	    oneVideoAtATime: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Preferences(source);
@@ -53,6 +54,7 @@ export namespace main {
 	        this.autogenerateSeekThumbs = source["autogenerateSeekThumbs"];
 	        this.openInExistingInstance = source["openInExistingInstance"];
 	        this.clickToTogglePlayback = source["clickToTogglePlayback"];
+	        this.oneVideoAtATime = source["oneVideoAtATime"];
 	    }
 	}
 

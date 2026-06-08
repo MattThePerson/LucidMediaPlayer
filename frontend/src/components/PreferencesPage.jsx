@@ -36,6 +36,17 @@ export default function PreferencesPage({ preferences, onSave }) {
                         <span className="preference-hint">Opening a file via "Open with" reuses this window instead of launching a new one.</span>
                     </span>
                 </label>
+                <label className="preference-row">
+                    <input
+                        type="checkbox"
+                        checked={!!preferences?.oneVideoAtATime}
+                        onChange={handleToggle('oneVideoAtATime')}
+                    />
+                    <span>
+                        One video playing at a time
+                        <span className="preference-hint">Switching tabs pauses the current video; switching back resumes it.</span>
+                    </span>
+                </label>
             </div>
         </div>
     );

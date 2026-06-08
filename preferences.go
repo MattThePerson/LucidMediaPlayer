@@ -14,6 +14,7 @@ type Preferences struct {
 	AutogenerateSeekThumbs  bool `json:"autogenerateSeekThumbs"`
 	OpenInExistingInstance  bool `json:"openInExistingInstance"`
 	ClickToTogglePlayback   bool `json:"clickToTogglePlayback"`
+	OneVideoAtATime         bool `json:"oneVideoAtATime"`
 }
 
 func configDir() (string, error) {

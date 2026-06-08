@@ -29,7 +29,7 @@ function AppIconSVG({ className }) {
     );
 }
 
-export default function HomeScreen({ version, isDragging, onOpenChangelog }) {
+export default function HomeScreen({ version, isDragging, onOpenChangelog, onOpenFolderAsPlaylist, onNewPlaylist }) {
     return (
         <div className="home-screen">
             <AppIcon className="home-icon" />
@@ -41,6 +41,14 @@ export default function HomeScreen({ version, isDragging, onOpenChangelog }) {
                 <div className="home-shortcut-hint">
                     <kbd>Ctrl+O</kbd>
                     <span>Open video</span>
+                </div>
+                <div className="home-shortcut-hint clickable" onClick={onOpenFolderAsPlaylist} role="button" tabIndex={0}>
+                    <kbd>Ctrl+K, Ctrl+O</kbd>
+                    <span>Open folder as playlist</span>
+                </div>
+                <div className="home-shortcut-hint clickable" onClick={onNewPlaylist} role="button" tabIndex={0}>
+                    <kbd>Ctrl+K, Ctrl+P</kbd>
+                    <span>New playlist</span>
                 </div>
             </div>
             {isDragging && (

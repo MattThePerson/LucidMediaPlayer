@@ -19,7 +19,7 @@ export default function TabBar({
     const lastOverRef = useRef(null);
     const recentTimerRef = useRef(null);
 
-    // Close main dropdown on outside click
+    // Close main dropdown on outside click or Escape
     useEffect(() => {
         if (!menuOpen) return;
         const onMouseDown = (e) => {
@@ -28,8 +28,19 @@ export default function TabBar({
                 setRecentOpen(false);
             }
         };
+        const onKey = (e) => {
+            if (e.code === 'Escape') {
+                e.stopPropagation();
+                setMenuOpen(false);
+                setRecentOpen(false);
+            }
+        };
         document.addEventListener('mousedown', onMouseDown);
-        return () => document.removeEventListener('mousedown', onMouseDown);
+        document.addEventListener('keydown', onKey, true);
+        return () => {
+            document.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('keydown', onKey, true);
+        };
     }, [menuOpen]);
 
     // Document-level dragover: only X position determines target tab
@@ -115,6 +126,8 @@ export default function TabBar({
                 {menuOpen && (
                     <div className="dropdown" onClick={e => e.stopPropagation()}>
                         {menuItemWithShortcut('Open File…', 'Ctrl+O', onOpenFile)}
+                        {menuItemWithShortcut('Open Folder as Playlist…', 'Ctrl+K, Ctrl+O', onOpenFolderAsPlaylist)}
+                        {menuItemWithShortcut('New Playlist', 'Ctrl+K, Ctrl+P', onNewPlaylist)}
 
                         <div className="dropdown-separator" />
 
@@ -171,9 +184,6 @@ export default function TabBar({
                         <div className="dropdown-separator" />
                         {menuItemWithShortcut('Settings', 'Ctrl+,', onOpenPreferences)}
                         <div className="dropdown-separator" />
-                        {menuItem('New Playlist', onNewPlaylist)}
-                        {menuItemWithShortcut('Open Folder as Playlist…', 'Ctrl+K, O', onOpenFolderAsPlaylist)}
-                        <div className="dropdown-separator" />
                         {menuItem('Quit', () => Quit())}
                     </div>
                 )}
@@ -190,6 +200,7 @@ export default function TabBar({
                             tab.type !== 'video' ? 'tab-page' : '',
                             tab.type === 'playlist' ? 'tab-playlist' : '',
                             tab.id === draggingId ? 'tab-dragging' : '',
+                            tabsState[tab.id] ? 'tab-is-playing' : '',
                         ].filter(Boolean).join(' ')}
                         draggable
                         onClick={() => onSwitch(tab.id)}
@@ -198,7 +209,6 @@ export default function TabBar({
                         onDragEnd={handleDragEnd}
                         title={tab.title}
                     >
-                        {tabsState[tab.id] && <span className="tab-playing" />}
                         <span className="tab-name">{tab.title}</span>
                         <button className="tab-close" onClick={e => { e.stopPropagation(); onClose(tab.id); }}>
                             ×

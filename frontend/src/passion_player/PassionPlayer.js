@@ -62,6 +62,7 @@ export class PassionPlayer {
         this._keydownHandler = null;
         this._hostEl = hostEl;
         this._destroyed = false;
+        this._hideTimer = null;
 
         this._init();
     }
@@ -130,6 +131,7 @@ export class PassionPlayer {
 
     destroy() {
         this._destroyed = true;
+        clearTimeout(this._hideTimer);
         if (this._keydownHandler) {
             document.removeEventListener("keydown", this._keydownHandler);
         }
@@ -157,6 +159,7 @@ export class PassionPlayer {
         this._addVolumeEventListeners();
         this._addFullscreenBtnEventListeners();
         this._addScrollEventListeners();
+        this._initControlsAutoHide();
     }
 
     _addPlayBtnEventListeners() {
@@ -307,6 +310,42 @@ export class PassionPlayer {
             const slider = this.$(".pp-volume-slider");
             if (slider) slider.value = newVol;
         }, { passive: false });
+    }
+
+    _initControlsAutoHide() {
+        const playerDiv = this.$(".PassionPlayer");
+        if (!playerDiv) return;
+        this._resetHideTimer();
+        playerDiv.addEventListener("mousemove", () => this._resetHideTimer());
+        playerDiv.addEventListener("mouseleave", () => {
+            clearTimeout(this._hideTimer);
+            this._hideControls();
+        });
+        playerDiv.addEventListener("mouseenter", () => this._resetHideTimer());
+    }
+
+    _resetHideTimer() {
+        this._showControls();
+        clearTimeout(this._hideTimer);
+        this._hideTimer = setTimeout(() => this._hideControls(), 2000);
+    }
+
+    _showControls() {
+        const controls = this.$(".controls-bar");
+        const progress = this.$("#progress-bar-default");
+        const player = this.$(".PassionPlayer");
+        if (controls) { controls.style.transitionDuration = "0ms"; controls.style.opacity = "1"; }
+        if (progress) { progress.style.transitionDuration = "0ms"; progress.style.opacity = "1"; }
+        if (player) player.style.cursor = "";
+    }
+
+    _hideControls() {
+        const controls = this.$(".controls-bar");
+        const progress = this.$("#progress-bar-default");
+        const player = this.$(".PassionPlayer");
+        if (controls) { controls.style.transitionDuration = "500ms"; controls.style.opacity = "0"; }
+        if (progress) { progress.style.transitionDuration = "500ms"; progress.style.opacity = "0"; }
+        if (player) player.style.cursor = "none";
     }
 
     // ====================================================================================================
@@ -711,6 +750,7 @@ video {
     height: 12px;
     cursor: pointer;
     background: #4987;
+    transition: opacity 500ms ease;
 }
 
 .progress-bar-wrapper {
@@ -736,6 +776,7 @@ video {
     align-items: center;
     justify-content: space-between;
     pointer-events: none;
+    transition: opacity 500ms ease;
 }
 
 .controls-left {
