@@ -8,3 +8,4 @@ package.json.md5
 # custom
 _*/
 binaries
+*.exe

@@ -126,6 +126,25 @@ body {
 }
 .dropdown-item-clear:hover { color: #c06060; background: #2a2020; }
 
+.dropdown-item-with-version {
+    padding: 8px 16px;
+    color: #ccc;
+    white-space: nowrap;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.dropdown-item-with-version:hover { background: #2e2e2e; color: white; }
+
+.dropdown-version {
+    font-size: 11px;
+    color: #555;
+    font-family: monospace;
+}
+.dropdown-item-with-version:hover .dropdown-version { color: #888; }
+
 .tabs-list {
     display: flex;
     align-items: stretch;

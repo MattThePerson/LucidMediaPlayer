@@ -22,6 +22,7 @@ export class PassionPlayer {
         onPause = null,
         onSeek = null,       // (fraction: 0–1) => void
         onFullscreen = null, // () => void — override native fullscreen
+        onVolumeChange = null, // (volume: 0–100) => void
     }) {
         this.player_id = player_id;
         this.src = src;
@@ -42,6 +43,7 @@ export class PassionPlayer {
         this.onPause = onPause;
         this.onSeek = onSeek;
         this.onFullscreen = onFullscreen;
+        this.onVolumeChange = onVolumeChange;
 
         this.root_element = null;
         this.shadow = null;
@@ -51,6 +53,7 @@ export class PassionPlayer {
         this._paused = true;
         this._currentTime = 0;
         this._duration = 0;
+        this._volume = 100;
 
         /* seek thumbs */
         this.seekThumbsContainer = null;
@@ -59,6 +62,7 @@ export class PassionPlayer {
 
         this._keydownHandler = null;
         this._hostEl = hostEl;
+        this._destroyed = false;
 
         this.init();
     }
@@ -78,6 +82,7 @@ export class PassionPlayer {
         this.shadow.innerHTML = '';
 
         await this.addStyles(this.shadow, this.dev_styles_path);
+        if (this._destroyed) return; // React Strict Mode called destroy() during the async gap
         this.addHTML(this.shadow);
 
         if (this.src) {
@@ -121,6 +126,7 @@ export class PassionPlayer {
     }
 
     destroy() {
+        this._destroyed = true;
         if (this._keydownHandler) {
             document.removeEventListener('keydown', this._keydownHandler);
         }
@@ -145,6 +151,8 @@ export class PassionPlayer {
         this.addVideoClickEventListeners();
         this.addDefaultProgressBarEventListeners();
         this.addPlayBtnEventListeners();
+        this.addVolumeEventListeners();
+        this.addFullscreenBtnEventListeners();
     }
 
     addPlayBtnEventListeners() {
@@ -160,21 +168,46 @@ export class PassionPlayer {
         }
     }
 
+    addFullscreenBtnEventListeners() {
+        const btn = this.$('.pp-fullscreen-btn');
+        if (!btn) return;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggle_fullscreen();
+        });
+    }
+
+    addVolumeEventListeners() {
+        const slider = this.$('.pp-volume-slider');
+        if (!slider) return;
+        slider.addEventListener('input', (e) => {
+            e.stopPropagation();
+            const vol = Number(e.target.value);
+            this._volume = vol;
+            this.onVolumeChange?.(vol);
+            this.updateVolumeIcon(vol);
+        });
+        // prevent clicks on the slider from bubbling to the player click handler
+        slider.addEventListener('click', (e) => e.stopPropagation());
+        slider.addEventListener('mousedown', (e) => e.stopPropagation());
+    }
+
     addVideoClickEventListeners() {
         let pb_flag = false;
         let fs_flag = false;
+        let pb_timer = null;
 
         // In headless mode attach to the player div; in HTML5 mode attach to the video element
         const clickTarget = this.video ?? this.$('.PassionPlayer');
 
         clickTarget.addEventListener('click', (e) => {
-            // In headless mode, don't capture clicks on the controls bar itself
-            if (!this.video && e.target.closest('.video-controls')) return;
+            // In headless mode, don't capture clicks on the control elements
+            if (!this.video && e.target.closest('.controls-bar')) return;
 
             if (pb_flag === false && fs_flag === false) {
                 pb_flag = true;
                 fs_flag = true;
-                setTimeout(() => {
+                pb_timer = setTimeout(() => {
                     if (pb_flag) {
                         this.toggle_playback();
                         pb_flag = false;
@@ -183,10 +216,10 @@ export class PassionPlayer {
                 setTimeout(() => { fs_flag = false; }, 350);
 
             } else if (fs_flag) {
-                if (pb_flag === false) {
-                    this.toggle_playback();
-                    this.$$('.pp-icon').forEach(el => { el.style.display = 'none'; });
-                }
+                // Double-click: cancel the pending single-click toggle and go fullscreen
+                clearTimeout(pb_timer);
+                pb_timer = null;
+                this.$$('.pp-icon').forEach(el => { el.style.display = 'none'; });
                 this.toggle_fullscreen();
                 pb_flag = false;
                 fs_flag = false;
@@ -215,6 +248,7 @@ export class PassionPlayer {
         });
 
         progress_bar_container.addEventListener('click', (e) => {
+            e.stopPropagation();
             const rect = progress_bar_container.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const perc = x / rect.width;
@@ -246,33 +280,33 @@ export class PassionPlayer {
         return /* html */`
             ${videoEl}
 
-            <!-- video controls -->
-            <div class="video-controls">
-
-                <!-- default progress bar -->
-                <div id="progress-bar-default" class="progress-bar-interact-zone">
-                    <div class="progress-bar-wrapper">
-                        <div class="progress-bar"></div>
-                    </div>
+            <!-- progress bar (seek) -->
+            <div id="progress-bar-default" class="progress-bar-interact-zone">
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar"></div>
                 </div>
-
-                <!-- alt progress bar -->
-                <div id="progress-bar-alt">
-                    <div id="playhead"></div>
-                </div>
-
-                <div class="time-duration-container">
-                    <div class="current">00:00</div>
-                    <span>/</span>
-                    <div class="duration"></div>
-                </div>
-
             </div>
 
-            <!-- play/pause button -->
-            <button class="pp-play-btn" title="Play/Pause">▶</button>
+            <!-- unified controls bar -->
+            <div class="controls-bar">
+                <div class="controls-left">
+                    <button class="pp-play-btn" title="Play/Pause">▶</button>
+                    <div class="pp-volume-control">
+                        <span class="pp-volume-icon">🔊</span>
+                        <input class="pp-volume-slider" type="range" min="0" max="100" value="100" title="Volume" />
+                    </div>
+                    <div class="time-duration-container">
+                        <div class="current">00:00</div>
+                        <span>/</span>
+                        <div class="duration">00:00</div>
+                    </div>
+                </div>
+                <div class="controls-right">
+                    <button class="pp-fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+                </div>
+            </div>
 
-            <!-- icons -->
+            <!-- play/pause flash indicator -->
             <div class="play-pause-indicator">
                 <svg class="pp-icon pause-icon" width="64px" height="64px" viewBox="-1 0 8 8" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
                     <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"><g id="Dribbble-Light-Preview" transform="translate(-227.000000, -3765.000000)" fill="#000000"><g id="icons" transform="translate(56.000000, 160.000000)">
@@ -284,7 +318,7 @@ export class PassionPlayer {
                 </svg>
             </div>
 
-            <!-- seek thumbs container -->
+            <!-- seek thumbnails -->
             <div id="seek-thumbs-container">
                 <div class="time"></div>
                 <div class="seek-thumbnail"></div>
@@ -429,10 +463,11 @@ export class PassionPlayer {
 
     // Push playback state from an external source (headless mode).
     // Safe to call before init() completes — elements may not exist yet.
-    setState({ currentTime, duration, paused }) {
+    setState({ currentTime, duration, paused, volume }) {
         if (currentTime !== undefined) this._currentTime = currentTime;
         if (duration !== undefined) this._duration = duration;
         if (paused !== undefined) this._paused = paused;
+        if (volume !== undefined) this._volume = volume;
 
         if (!this.shadow) return;
 
@@ -449,6 +484,12 @@ export class PassionPlayer {
         if (durationEl) durationEl.textContent = this.format_time(this._duration);
 
         if (paused !== undefined) this.updatePlayBtn();
+
+        if (volume !== undefined) {
+            const slider = this.$('.pp-volume-slider');
+            if (slider) slider.value = volume;
+            this.updateVolumeIcon(volume);
+        }
     }
 
     // ====================================================================================================
@@ -472,6 +513,8 @@ export class PassionPlayer {
     }
 
     toggle_playback() {
+        // Debug: log every invocation with timestamp so we can identify double-calls
+        console.debug(`[PP:toggle_playback] @ ${Date.now()} _paused=${this._paused}`);
         if (this.video) {
             this.video.paused ? this.playVideo() : this.pauseVideo();
         } else {
@@ -504,6 +547,14 @@ export class PassionPlayer {
         if (!btn) return;
         const paused = this.video ? this.video.paused : this._paused;
         btn.textContent = paused ? '▶' : '⏸';
+    }
+
+    updateVolumeIcon(vol) {
+        const icon = this.$('.pp-volume-icon');
+        if (!icon) return;
+        if (vol === 0) icon.textContent = '🔇';
+        else if (vol < 50) icon.textContent = '🔉';
+        else icon.textContent = '🔊';
     }
 
     flashPPIndicator(selector) {
@@ -595,37 +646,44 @@ video {
     background: pink;
 }
 
-#progress-bar-alt {
-    display: none;
+/* CONTROLS BAR */
+
+.controls-bar {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 3rem;
-    background: #4847;
-    cursor: pointer;
+    bottom: 12px;
+    left: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    pointer-events: none;
 }
 
-#playhead {
-    position: absolute;
-    top: 0;
-    left: calc(50% - 2px);
-    width: 2px;
-    height: calc(100% - 8px);
-    margin: 4px 0;
-    background: orangered;
-    border-radius: 2px;
+.controls-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: auto;
+}
+
+.controls-right {
+    display: flex;
+    align-items: center;
+    pointer-events: auto;
 }
 
 .time-duration-container {
-    position: absolute;
-    bottom: 3rem;
-    left: 4rem;
     display: flex;
+    align-items: center;
     gap: 4px;
     background: #0007;
-    padding: 2px 4px;
-    border-radius: 2px;
+    border: 1px solid #fff3;
+    border-radius: 6px;
+    padding: 0 8px;
+    height: 36px;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 /* PLAY/PAUSE INDICATOR */
@@ -685,9 +743,6 @@ video {
 /* PLAY/PAUSE BUTTON */
 
 .pp-play-btn {
-    position: absolute;
-    bottom: 20px;
-    left: 8px;
     width: 36px;
     height: 36px;
     background: #0007;
@@ -700,9 +755,79 @@ video {
     align-items: center;
     justify-content: center;
     transition: background 150ms;
+    flex-shrink: 0;
 }
 .pp-play-btn:hover {
     background: #000b;
+}
+
+/* FULLSCREEN BUTTON */
+
+.pp-fullscreen-btn {
+    width: 36px;
+    height: 36px;
+    background: #0007;
+    border: 1px solid #fff3;
+    border-radius: 6px;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 150ms;
+    flex-shrink: 0;
+}
+.pp-fullscreen-btn:hover {
+    background: #000b;
+}
+
+/* VOLUME CONTROL */
+
+.pp-volume-control {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #0007;
+    border: 1px solid #fff3;
+    border-radius: 6px;
+    padding: 0 8px;
+    height: 36px;
+}
+
+.pp-volume-icon {
+    font-size: 14px;
+    line-height: 1;
+    cursor: default;
+    user-select: none;
+}
+
+.pp-volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 72px;
+    height: 4px;
+    border-radius: 2px;
+    background: #fff5;
+    outline: none;
+    cursor: pointer;
+}
+.pp-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+}
+.pp-volume-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+    border: none;
 }
 
 #seek-thumbs-container .time {

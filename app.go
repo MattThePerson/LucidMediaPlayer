@@ -20,30 +20,79 @@ import (
 )
 
 var (
-	modUser32      = syscall.NewLazyDLL("user32.dll")
-	findWindowW    = modUser32.NewProc("FindWindowW")
-	showWindowW    = modUser32.NewProc("ShowWindow")
-	getWindowW     = modUser32.NewProc("GetWindow")
-	getClientRectW = modUser32.NewProc("GetClientRect")
-	moveWindowW    = modUser32.NewProc("MoveWindow")
+	modUser32           = syscall.NewLazyDLL("user32.dll")
+	findWindowW         = modUser32.NewProc("FindWindowW")
+	showWindowW         = modUser32.NewProc("ShowWindow")
+	getWindowW          = modUser32.NewProc("GetWindow")
+	getClientRectW      = modUser32.NewProc("GetClientRect")
+	moveWindowW         = modUser32.NewProc("MoveWindow")
+	getWindowLongW      = modUser32.NewProc("GetWindowLongW")
+	setWindowLongW      = modUser32.NewProc("SetWindowLongW")
+	setWindowPos        = modUser32.NewProc("SetWindowPos")
+	getWindowRect       = modUser32.NewProc("GetWindowRect")
+	monitorFromWin      = modUser32.NewProc("MonitorFromWindow")
+	getMonitorInfoW     = modUser32.NewProc("GetMonitorInfoW")
+	setWindowLongPtrW   = modUser32.NewProc("SetWindowLongPtrW")
+	callWindowProcW     = modUser32.NewProc("CallWindowProcW")
 )
 
 const (
 	swHide     = uintptr(0)
-	swShow     = uintptr(5)
+	swShow     = uintptr(8) // SW_SHOWNA — show without activating (preserves z-order)
 	gwChild    = uintptr(5)
 	gwHwndNext = uintptr(2)
 
 	tabBarHeight = 36 // must match .tab-bar height in style.css
+
+	gwlStyle           = uintptr(0xFFFFFFF0) // GWL_STYLE = -16 as uint
+	wsOverlappedWindow = uint32(0x00CF0000)
+	swpFrameChanged    = uintptr(0x0020)
+	swpNozorder        = uintptr(0x0004)
+	swpNomove          = uintptr(0x0002)
+	swpNosize          = uintptr(0x0001)
+	hwndTop             = uintptr(0)
+	hwndBottom          = uintptr(1)
+	monitorDefaultToNearest = uintptr(2)
+
+	// SetWindowLongPtr index for replacing the window procedure
+	gwlpWndProc = uintptr(0xFFFFFFFC) // GWLP_WNDPROC = -4 (lower 32 bits)
+
+	// WM_SYSCOMMAND / SC_KEYMENU — suppress Alt-key system menu activation
+	wmSysCommand = uintptr(0x0112)
+	scKeyMenu    = uintptr(0xF100)
 )
 
 type winRECT struct{ Left, Top, Right, Bottom int32 }
+
+// origWndProc holds the previous window procedure so we can forward non-intercepted messages.
+var (
+	origWndProc    uintptr
+	wndProcCallback uintptr // kept alive so GC doesn't collect the closure
+)
+
+// wndProcSubclass intercepts WM_SYSCOMMAND/SC_KEYMENU to prevent Alt from opening
+// the Win32 system menu (which would conflict with Alt+N tab shortcuts and be annoying).
+func wndProcSubclass(hwnd, msg, wParam, lParam uintptr) uintptr {
+	if msg == wmSysCommand && (wParam&0xFFF0) == scKeyMenu {
+		return 0 // swallow — no system menu
+	}
+	ret, _, _ := callWindowProcW.Call(origWndProc, hwnd, msg, wParam, lParam)
+	return ret
+}
+
+type monitorInfo struct {
+	cbSize    uint32
+	rcMonitor winRECT
+	rcWork    winRECT
+	dwFlags   uint32
+}
 
 // PlaybackInfo is returned to the frontend for a given tab.
 type PlaybackInfo struct {
 	TimePos  float64 `json:"time_pos"`
 	Duration float64 `json:"duration"`
 	Paused   bool    `json:"paused"`
+	Volume   float64 `json:"volume"`
 }
 
 // TabInstance owns one mpv subprocess and its associated state.
@@ -58,8 +107,9 @@ type TabInstance struct {
 	timePos  float64
 	duration float64
 	paused   bool
-	dbID     int64  // videos.id; 0 until DB upsert completes
-	hash     string // hex SHA-256 of 3×64 KB chunks; "" until background hash completes
+	volume   float64 // 0–100; defaults to 100
+	dbID     int64   // videos.id; 0 until DB upsert completes
+	hash     string  // hex SHA-256 of 3×64 KB chunks; "" until background hash completes
 }
 
 func (t *TabInstance) writeIPC(msg string) error {
@@ -78,6 +128,7 @@ func (t *TabInstance) startReader() {
 	fmt.Fprint(conn, `{"command": ["observe_property", 1, "time-pos"]}`+"\n")
 	fmt.Fprint(conn, `{"command": ["observe_property", 2, "duration"]}`+"\n")
 	fmt.Fprint(conn, `{"command": ["observe_property", 3, "pause"]}`+"\n")
+	fmt.Fprint(conn, `{"command": ["observe_property", 4, "volume"]}`+"\n")
 	t.ipcMu.Unlock()
 
 	scanner := bufio.NewScanner(conn)
@@ -107,6 +158,10 @@ func (t *TabInstance) startReader() {
 					go dbSavePosition(dbID, pos) //nolint:errcheck
 				}
 			}
+		case "volume":
+			if v, ok := msg["data"].(float64); ok {
+				t.volume = v
+			}
 		}
 		t.stateMu.Unlock()
 	}
@@ -114,12 +169,14 @@ func (t *TabInstance) startReader() {
 
 // App is the Wails application struct.
 type App struct {
-	ctx          context.Context
-	parentHWND   uintptr
-	tabsMu       sync.RWMutex
-	tabs         map[string]*TabInstance
-	activeTabID  string
-	isFullscreen bool
+	ctx              context.Context
+	parentHWND       uintptr
+	tabsMu           sync.RWMutex
+	tabs             map[string]*TabInstance
+	activeTabID      string
+	isFullscreen     bool
+	savedWindowStyle uint32
+	savedWindowRect  winRECT
 }
 
 func NewApp() *App {
@@ -149,8 +206,13 @@ func (a *App) onDomReady(ctx context.Context) {
 	}
 	a.parentHWND = hwnd
 	a.emitDebug("startup", fmt.Sprintf("parentHWND=%d — ready", hwnd))
-	// File drop is handled via JS-side OnFileDrop (window.runtime.OnFileDrop),
-	// not Go's runtime.OnFileDrop, because WebView2 owns the drop event.
+
+	// Subclass the window procedure to suppress Alt-key system menu (SC_KEYMENU).
+	// This prevents Alt+Space from opening the Win32 system menu and allows
+	// Alt+N shortcuts to work cleanly without the menu bar activating.
+	wndProcCallback = syscall.NewCallback(wndProcSubclass)
+	origWndProc, _, _ = setWindowLongPtrW.Call(a.parentHWND, gwlpWndProc, wndProcCallback)
+	a.emitDebug("startup", fmt.Sprintf("wndproc subclassed, orig=%d", origWndProc))
 }
 
 func (a *App) emitDebug(source, message string) {
@@ -197,6 +259,8 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 		"--pause",
 		"--no-terminal",
 		"--keep-open=yes",
+		"--no-input-default-bindings", // prevent mpv from handling its own clicks/keys
+		"--input-vo-keyboard=no",      // prevent mpv vo from consuming keyboard events
 		filePath,
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -218,9 +282,12 @@ func (a *App) OpenVideo(filePath string) (string, error) {
 	a.emitDebug("OpenVideo", fmt.Sprintf("childHWND=%d tabID=%s", childHWND, tabID))
 
 	// Pre-position while hidden so it's in the right place when SwitchTab reveals it.
+	// Push mpv to the bottom of the z-order so WebView2 (created earlier) stays on
+	// top and captures all mouse input — prevents mpv's click-to-pause from firing.
 	if childHWND != 0 {
 		a.positionChildWindow(childHWND)
 		setWindowVisibility(childHWND, false)
+		setWindowPos.Call(childHWND, hwndBottom, 0, 0, 0, 0, swpNosize|swpNomove)
 	}
 
 	tab := &TabInstance{
@@ -367,7 +434,7 @@ func (a *App) SwitchTab(tabID string) error {
 		setWindowVisibility(tab.childHWND, true)
 	}
 	a.activeTabID = tabID
-	runtime.WindowSetTitle(a.ctx, "Sunset Video Player — "+filepath.Base(tab.filePath))
+	runtime.WindowSetTitle(a.ctx, "Sunset Video Player - "+filepath.Base(tab.filePath))
 	return nil
 }
 
@@ -434,6 +501,10 @@ func (a *App) TogglePlayback(tabID string) error {
 	if !ok {
 		return fmt.Errorf("tab not found")
 	}
+	tab.stateMu.RLock()
+	paused := tab.paused
+	tab.stateMu.RUnlock()
+	a.emitDebug("TogglePlayback", fmt.Sprintf("tabID=%s paused=%v → cycling", tabID, paused))
 	return tab.writeIPC(`{"command": ["cycle", "pause"]}` + "\n")
 }
 
@@ -458,15 +529,31 @@ func (a *App) GetPlaybackInfo(tabID string) PlaybackInfo {
 	tab, ok := a.tabs[tabID]
 	a.tabsMu.RUnlock()
 	if !ok {
-		return PlaybackInfo{Paused: true}
+		return PlaybackInfo{Paused: true, Volume: 100}
 	}
 	tab.stateMu.RLock()
 	defer tab.stateMu.RUnlock()
+	vol := tab.volume
+	if vol == 0 {
+		vol = 100
+	}
 	return PlaybackInfo{
 		TimePos:  tab.timePos,
 		Duration: tab.duration,
 		Paused:   tab.paused,
+		Volume:   vol,
 	}
+}
+
+// SetVolume adjusts the volume for the given tab (0–100).
+func (a *App) SetVolume(tabID string, volume float64) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("tab %s not found", tabID)
+	}
+	return tab.writeIPC(fmt.Sprintf(`{"command":["set_property","volume",%g]}`+"\n", volume))
 }
 
 // GetAllTabsState returns a map of tabID → isPlaying for tab indicators.
@@ -484,17 +571,43 @@ func (a *App) GetAllTabsState() map[string]bool {
 
 func (a *App) ToggleFullscreen() {
 	if a.isFullscreen {
-		runtime.WindowUnfullscreen(a.ctx)
+		// Restore window style and saved position/size.
+		setWindowLongW.Call(a.parentHWND, gwlStyle, uintptr(a.savedWindowStyle))
+		setWindowPos.Call(a.parentHWND, hwndTop,
+			uintptr(uint32(a.savedWindowRect.Left)),
+			uintptr(uint32(a.savedWindowRect.Top)),
+			uintptr(uint32(a.savedWindowRect.Right-a.savedWindowRect.Left)),
+			uintptr(uint32(a.savedWindowRect.Bottom-a.savedWindowRect.Top)),
+			swpFrameChanged|swpNozorder,
+		)
 		a.isFullscreen = false
 		runtime.EventsEmit(a.ctx, "fullscreen-changed", false)
 	} else {
-		runtime.WindowFullscreen(a.ctx)
+		// Save current style and window rect before stripping decoration.
+		style, _, _ := getWindowLongW.Call(a.parentHWND, gwlStyle)
+		a.savedWindowStyle = uint32(style)
+		getWindowRect.Call(a.parentHWND, uintptr(unsafe.Pointer(&a.savedWindowRect)))
+
+		// Get the monitor rect that contains the window.
+		hMon, _, _ := monitorFromWin.Call(a.parentHWND, monitorDefaultToNearest)
+		var mi monitorInfo
+		mi.cbSize = uint32(unsafe.Sizeof(mi))
+		getMonitorInfoW.Call(hMon, uintptr(unsafe.Pointer(&mi)))
+
+		// Remove title bar / borders, then cover the monitor.
+		setWindowLongW.Call(a.parentHWND, gwlStyle, uintptr(a.savedWindowStyle&^wsOverlappedWindow))
+		setWindowPos.Call(a.parentHWND, hwndTop,
+			uintptr(uint32(mi.rcMonitor.Left)),
+			uintptr(uint32(mi.rcMonitor.Top)),
+			uintptr(uint32(mi.rcMonitor.Right-mi.rcMonitor.Left)),
+			uintptr(uint32(mi.rcMonitor.Bottom-mi.rcMonitor.Top)),
+			swpFrameChanged|swpNozorder,
+		)
 		a.isFullscreen = true
 		runtime.EventsEmit(a.ctx, "fullscreen-changed", true)
 	}
-	// Reposition immediately for the y-offset flip; the frontend resize listener
-	// will follow up with the correct final dimensions once the window settles.
-	a.ResizeVideo()
+	// Defer ResizeVideo until the window has actually settled.
+	time.AfterFunc(50*time.Millisecond, a.ResizeVideo)
 }
 
 func (a *App) GetVersion() string {

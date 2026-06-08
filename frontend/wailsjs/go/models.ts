@@ -4,6 +4,7 @@ export namespace main {
 	    time_pos: number;
 	    duration: number;
 	    paused: boolean;
+	    volume: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new PlaybackInfo(source);
@@ -14,6 +15,7 @@ export namespace main {
 	        this.time_pos = source["time_pos"];
 	        this.duration = source["duration"];
 	        this.paused = source["paused"];
+	        this.volume = source["volume"];
 	    }
 	}
 	export class RecentEntry {

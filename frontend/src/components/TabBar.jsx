@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { Quit } from '../../wailsjs/runtime/runtime';
 
 export default function TabBar({
     tabs, activeTabId, tabsState,
     onSwitch, onClose,
     onOpenFile, onOpenDebug, onOpenChangelog, onReorder,
     recentFiles, onOpenRecent, onClearRecent,
+    version,
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [recentOpen, setRecentOpen] = useState(false);
@@ -58,12 +60,24 @@ export default function TabBar({
         setDraggingId(id);
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', id);
+
+        // Suppress the native ghost image so the tab only moves within the bar
+        const ghost = document.createElement('div');
+        ghost.style.cssText = 'width:1px;height:1px;position:fixed;top:-100px;left:-100px;opacity:0';
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, 0, 0);
+        requestAnimationFrame(() => document.body.removeChild(ghost));
     };
 
     const handleDragEnd = () => {
+        const id = draggedIdRef.current;
         draggedIdRef.current = null;
         lastOverRef.current = null;
         setDraggingId(null);
+        // Switch to the tab that was dragged
+        if (id && id !== activeTabId) {
+            onSwitch(id);
+        }
     };
 
     // Submenu hover helpers — 150ms close delay lets the mouse travel from
@@ -142,9 +156,14 @@ export default function TabBar({
 
                         <div className="dropdown-separator" />
                         {menuItem('Debug', onOpenDebug)}
-                        {menuItem('Changelog', onOpenChangelog)}
+                        <div className="dropdown-item dropdown-item-with-version" onClick={() => { closeMenu(); onOpenChangelog(); }}>
+                            Changelog
+                            {version && <span className="dropdown-version">{version}</span>}
+                        </div>
                         <div className="dropdown-separator" />
                         {menuItem('Preferences', () => {})}
+                        <div className="dropdown-separator" />
+                        {menuItem('Quit', () => Quit())}
                     </div>
                 )}
             </div>

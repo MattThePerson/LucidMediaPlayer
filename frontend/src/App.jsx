@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     OpenVideo, OpenFilePicker, SwitchTab, CloseTab,
     TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
     ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
-    ResizeVideo,
+    ResizeVideo, SetVolume,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
@@ -19,12 +19,15 @@ const PAGE_TITLES = { debug: 'Debug', changelog: 'Changelog' };
 function App() {
     const [tabs, setTabs] = useState([]);
     const [activeTabId, setActiveTabId] = useState(null);
-    const [info, setInfo] = useState({ time_pos: 0, duration: 0, paused: true });
+    const [info, setInfo] = useState({ time_pos: 0, duration: 0, paused: true, volume: 100 });
     const [tabsState, setTabsState] = useState({});
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [version, setVersion] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [recentFiles, setRecentFiles] = useState([]);
+
+    // Stack of recently closed tabs for Ctrl+Shift+T reopen
+    const closedTabsRef = useRef([]);
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
 
@@ -35,10 +38,10 @@ function App() {
         try {
             const tabId = await OpenVideo(filePath);
             debugLog('OpenVideo', 'success tabId=' + tabId);
-            setTabs(prev => [...prev, { id: tabId, type: 'video', title: filename }]);
+            setTabs(prev => [...prev, { id: tabId, type: 'video', title: filename, path: filePath }]);
             await SwitchTab(tabId);
             setActiveTabId(tabId);
-            setInfo({ time_pos: 0, duration: 0, paused: true });
+            setInfo({ time_pos: 0, duration: 0, paused: true, volume: 100 });
             GetRecentFiles().then(setRecentFiles).catch(() => {});
         } catch (e) {
             debugLog('OpenVideo', 'ERROR: ' + e);
@@ -49,10 +52,10 @@ function App() {
         GetVersion().then(setVersion).catch(() => {});
         GetRecentFiles().then(setRecentFiles).catch(() => {});
 
-        EventsOn('debug-log', (payload) => {
+        const offDebugLog = EventsOn('debug-log', (payload) => {
             debugLog(payload?.source ?? 'go', payload?.message ?? String(payload));
         });
-        EventsOn('fullscreen-changed', setIsFullscreen);
+        const offFullscreen = EventsOn('fullscreen-changed', setIsFullscreen);
 
         // JS-side OnFileDrop is the correct Wails v2 API for WebView2 file drops.
         // Go's runtime.OnFileDrop only works for Win32-level drops and never fires here.
@@ -75,6 +78,8 @@ function App() {
         window.addEventListener('dragleave', onDragLeave);
         window.addEventListener('drop', onDrop);
         return () => {
+            offDebugLog?.();
+            offFullscreen?.();
             OnFileDropOff();
             window.removeEventListener('dragenter', onDragEnter);
             window.removeEventListener('dragover', onDragOver);
@@ -115,12 +120,21 @@ function App() {
         const tab = tabId ? tabs.find(t => t.id === tabId) : null;
         await SwitchTab(tab?.type === 'video' ? tabId : '');
         setActiveTabId(tabId ?? null);
-        setInfo({ time_pos: 0, duration: 0, paused: true });
+        setInfo({ time_pos: 0, duration: 0, paused: true, volume: 100 });
     }, [activeTabId, tabs]);
 
     const handleCloseTab = useCallback(async (tabId) => {
         const idx = tabs.findIndex(t => t.id === tabId);
         const tab = tabs.find(t => t.id === tabId);
+
+        // Remember closed tab for Ctrl+Shift+T
+        if (tab) {
+            closedTabsRef.current.push({
+                type: tab.type,
+                path: tab.path, // full path for video tabs
+            });
+        }
+
         if (tab?.type === 'video') await CloseTab(tabId);
         const newTabs = tabs.filter(t => t.id !== tabId);
         setTabs(newTabs);
@@ -129,7 +143,7 @@ function App() {
             const next = newTabs[Math.min(idx, newTabs.length - 1)] ?? null;
             await SwitchTab(next?.type === 'video' ? next.id : '');
             setActiveTabId(next?.id ?? null);
-            setInfo({ time_pos: 0, duration: 0, paused: true });
+            setInfo({ time_pos: 0, duration: 0, paused: true, volume: 100 });
         }
     }, [tabs, activeTabId]);
 
@@ -164,6 +178,7 @@ function App() {
 
     const handleTogglePlayback = useCallback(() => {
         if (!activeTabId) return;
+        debugLog('App', `handleTogglePlayback @ ${Date.now()}`);
         TogglePlayback(activeTabId).catch(console.error);
         setTimeout(() => {
             GetPlaybackInfo(activeTabId).then(setInfo).catch(() => {});
@@ -182,15 +197,31 @@ function App() {
         }
     }, [openVideoPath]);
 
+    const handleVolumeChange = useCallback((vol) => {
+        if (!activeTabId) return;
+        SetVolume(activeTabId, vol).catch(console.error);
+    }, [activeTabId]);
+
     useEffect(() => {
         const onKey = (e) => {
             const tag = document.activeElement?.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-            if (e.code === 'Space' && activeTab?.type === 'video') {
+
+            const isVideo = activeTab?.type === 'video';
+
+            if (e.code === 'Space' && isVideo) {
+                e.preventDefault();
+                handleTogglePlayback();
+            }
+            if (e.code === 'KeyS' && isVideo && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
                 handleTogglePlayback();
             }
             if (e.code === 'KeyF') ToggleFullscreen().catch(console.error);
+            if (e.code === 'Escape' && isFullscreen) {
+                e.preventDefault();
+                ToggleFullscreen().catch(console.error);
+            }
             if (e.code === 'F3') { e.preventDefault(); openPageTab('debug'); }
             if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') {
                 const text = getDebugLogs().map(e => `${e.time} [${e.source}] ${e.message}`).join('\n');
@@ -199,6 +230,16 @@ function App() {
             if (e.ctrlKey && e.code === 'KeyW' && activeTabId) {
                 e.preventDefault();
                 handleCloseTab(activeTabId);
+            }
+            if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') {
+                e.preventDefault();
+                const last = closedTabsRef.current.pop();
+                if (!last) return;
+                if (last.type === 'video' && last.path) {
+                    openVideoPath(last.path);
+                } else if (last.type !== 'video') {
+                    openPageTab(last.type);
+                }
             }
             if (e.ctrlKey && e.code === 'Tab' && tabs.length > 1) {
                 e.preventDefault();
@@ -220,10 +261,39 @@ function App() {
                     return next;
                 });
             }
+
+            // Alt+1–9 switches to tab N
+            if (e.altKey && !e.ctrlKey && !e.shiftKey) {
+                const m = e.code.match(/^Digit([1-9])$/);
+                if (m) {
+                    e.preventDefault();
+                    const idx = parseInt(m[1]) - 1;
+                    if (idx < tabs.length) handleSwitchTab(tabs[idx].id);
+                }
+            }
+
+            // Seek shortcuts (only for video tabs with known duration)
+            if (isVideo && info.duration > 0) {
+                const seekBy = (delta) => {
+                    const newFrac = Math.max(0, Math.min(1, (info.time_pos + delta) / info.duration));
+                    Seek(activeTabId, newFrac).catch(console.error);
+                };
+                if (!e.ctrlKey && !e.altKey) {
+                    if (e.code === 'ArrowLeft') { e.preventDefault(); seekBy(-7); }
+                    if (e.code === 'ArrowRight') { e.preventDefault(); seekBy(7); }
+                    if (!e.shiftKey) {
+                        if (e.code === 'KeyA') { e.preventDefault(); seekBy(-7); }
+                        if (e.code === 'KeyD') { e.preventDefault(); seekBy(7); }
+                    } else {
+                        if (e.code === 'KeyA') { e.preventDefault(); seekBy(-2); }
+                        if (e.code === 'KeyD') { e.preventDefault(); seekBy(2); }
+                    }
+                }
+            }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [activeTabId, activeTab, tabs, handleCloseTab, handleSwitchTab, handleTogglePlayback, openPageTab, setTabs]);
+    }, [activeTabId, activeTab, tabs, isFullscreen, info, handleCloseTab, handleSwitchTab, handleTogglePlayback, openPageTab, openVideoPath, setTabs]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
@@ -241,6 +311,7 @@ function App() {
                     recentFiles={recentFiles}
                     onOpenRecent={openVideoPath}
                     onClearRecent={handleClearRecent}
+                    version={version}
                 />
             )}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
@@ -251,6 +322,7 @@ function App() {
                         onTogglePlayback={handleTogglePlayback}
                         onSeek={(pos) => Seek(activeTabId, pos).catch(console.error)}
                         onFullscreen={() => ToggleFullscreen().catch(console.error)}
+                        onVolumeChange={handleVolumeChange}
                     />
                 )}
                 {activeTab?.type === 'debug' && <DebugPage />}

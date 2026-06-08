@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { PassionPlayer } from '../passion_player/PassionPlayer.js';
+import { debugLog } from '../debug';
 
-export default function PassionPlayerWrapper({ info, onTogglePlayback, onSeek, onFullscreen }) {
+export default function PassionPlayerWrapper({ info, onTogglePlayback, onSeek, onFullscreen, onVolumeChange }) {
     const hostRef = useRef(null);
     const playerRef = useRef(null);
 
@@ -10,17 +11,26 @@ export default function PassionPlayerWrapper({ info, onTogglePlayback, onSeek, o
     const onTogglePlaybackRef = useRef(onTogglePlayback);
     const onSeekRef = useRef(onSeek);
     const onFullscreenRef = useRef(onFullscreen);
+    const onVolumeChangeRef = useRef(onVolumeChange);
     onTogglePlaybackRef.current = onTogglePlayback;
     onSeekRef.current = onSeek;
     onFullscreenRef.current = onFullscreen;
+    onVolumeChangeRef.current = onVolumeChange;
 
     useEffect(() => {
         playerRef.current = new PassionPlayer({
             hostEl: hostRef.current,
-            onPlay:       () => onTogglePlaybackRef.current?.(),
-            onPause:      () => onTogglePlaybackRef.current?.(),
-            onSeek:   pos => onSeekRef.current?.(pos),
-            onFullscreen: () => onFullscreenRef.current?.(),
+            onPlay:  () => {
+                debugLog('PlayerWrapper', `onPlay fired @ ${Date.now()}`);
+                onTogglePlaybackRef.current?.();
+            },
+            onPause: () => {
+                debugLog('PlayerWrapper', `onPause fired @ ${Date.now()}`);
+                onTogglePlaybackRef.current?.();
+            },
+            onSeek:       pos => onSeekRef.current?.(pos),
+            onFullscreen:     () => onFullscreenRef.current?.(),
+            onVolumeChange: vol => onVolumeChangeRef.current?.(vol),
             disable_keybinds: true,
             quiet: true,
         });
@@ -28,7 +38,12 @@ export default function PassionPlayerWrapper({ info, onTogglePlayback, onSeek, o
     }, []);
 
     useEffect(() => {
-        playerRef.current?.setState(info);
+        playerRef.current?.setState({
+            currentTime: info.time_pos,
+            duration:    info.duration,
+            paused:      info.paused,
+            volume:      info.volume,
+        });
     }, [info]);
 
     return <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />;

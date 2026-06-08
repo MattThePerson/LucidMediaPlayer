@@ -50,6 +50,10 @@ export function Seek(arg1, arg2) {
   return window['go']['main']['App']['Seek'](arg1, arg2);
 }
 
+export function SetVolume(arg1, arg2) {
+  return window['go']['main']['App']['SetVolume'](arg1, arg2);
+}
+
 export function SwitchTab(arg1) {
   return window['go']['main']['App']['SwitchTab'](arg1);
 }

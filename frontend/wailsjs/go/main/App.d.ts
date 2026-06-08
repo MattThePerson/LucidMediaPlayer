@@ -26,6 +26,8 @@ export function ResizeVideo():Promise<void>;
 
 export function Seek(arg1:string,arg2:number):Promise<void>;
 
+export function SetVolume(arg1:string,arg2:number):Promise<void>;
+
 export function SwitchTab(arg1:string):Promise<void>;
 
 export function ToggleFullscreen():Promise<void>;

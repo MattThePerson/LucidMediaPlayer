@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.1.10] — 2026-06-08
+- Fix: clicking progress bar no longer triggers play/pause toggle (missing stopPropagation let click bubble to player div)
+
+## [0.1.9] — 2026-06-08
+- Fix: double-toggle on click — React Strict Mode caused PassionPlayer to double-register click listeners via async init() race; `_destroyed` guard after await prevents stale init from adding DOM elements/listeners
+- Fix: debug logs appearing 4x — EventsOn listeners were never cleaned up on re-render; now using returned unsubscribe functions
+- Fix: window title uses regular dash instead of em-dash
+- Fix: progress bar restored to bottom edge (was accidentally moved in control bar restructure)
+
+## [0.1.8] — 2026-06-08
+- Fix: unified controls bar — play button, volume, and time display now aligned in a single row at bottom-left; fullscreen button added at bottom-right
+- Add: Alt+1–9 switches to tab by index
+- Add: Alt+Space system menu suppressed via Win32 window proc subclass (SC_KEYMENU intercepted)
+- Debug: added debug log traces for toggle playback (Go, PassionPlayerWrapper, App.jsx) to diagnose double-toggle
+
+## [0.1.7] — 2026-06-08
+- Fix: progress bar and time display now update correctly (field mapping time_pos → currentTime)
+- Fix: double-toggle on click/button resolved (disabled mpv built-in bindings, HWND z-order, click handler timer cancel)
+- Fix: fullscreen now uses custom Win32 toggle — window chrome (title bar, buttons) reliably restored on exit
+- Add: volume slider in player controls (IPC-based mpv volume)
+- Add: Ctrl+Shift+T reopens last closed tab
+- Add: Escape exits fullscreen
+- Add: S key toggles playback; Arrow/A/D keys jump ±7s; Shift+A/D jump ±2s
+- Add: app version shown next to Changelog in hamburger menu
+- Add: Quit option in hamburger menu
+- Add: dragging a tab activates it on drop; drag ghost stays within tab bar
+
 ## [0.1.6] — 2026-06-08
 - SQLite database at `%APPDATA%\SunsetVideoPlayer\db.sqlite` (modernc.org/sqlite, no CGO)
 - Fix AppData folder name: `"Sunset Video Player"` (spaces) → `"SunsetVideoPlayer"` (PascalCase)
