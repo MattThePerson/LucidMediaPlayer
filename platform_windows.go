@@ -46,6 +46,8 @@ const (
 	swpNosize          = uintptr(0x0001)
 	hwndTop            = uintptr(0)
 	hwndBottom         = uintptr(1)
+	wsMaximize         = uint32(0x01000000) // WS_MAXIMIZE
+	swShowMaximized    = uintptr(3)         // SW_SHOWMAXIMIZED
 	monitorDefaultToNearest = uintptr(2)
 
 	gwlpWndProc  = uintptr(0xFFFFFFFC) // GWLP_WNDPROC = -4
@@ -201,13 +203,23 @@ func bringToFront(a *App) {
 func platformToggleFullscreen(a *App) {
 	if a.isFullscreen {
 		setWindowLongProc.Call(a.parentHWND, gwlStyle, uintptr(a.savedWindowStyle))
-		setWindowPosProc.Call(a.parentHWND, hwndTop,
-			uintptr(uint32(a.savedWindowRect.Left)),
-			uintptr(uint32(a.savedWindowRect.Top)),
-			uintptr(uint32(a.savedWindowRect.Right-a.savedWindowRect.Left)),
-			uintptr(uint32(a.savedWindowRect.Bottom-a.savedWindowRect.Top)),
-			swpFrameChanged|swpNozorder,
-		)
+		if a.savedWindowStyle&wsMaximize != 0 {
+			// Window was maximized before fullscreen. GetWindowRect on a maximized
+			// window captures coords that include invisible frame borders and can
+			// extend to the full monitor height (past the taskbar). Using those
+			// coords with SetWindowPos would leave the window covering the taskbar.
+			// ShowWindow(SW_SHOWMAXIMIZED) lets Windows recalculate the correct
+			// maximized rect for the work area (taskbar excluded).
+			showWindowProc.Call(a.parentHWND, swShowMaximized)
+		} else {
+			setWindowPosProc.Call(a.parentHWND, hwndTop,
+				uintptr(uint32(a.savedWindowRect.Left)),
+				uintptr(uint32(a.savedWindowRect.Top)),
+				uintptr(uint32(a.savedWindowRect.Right-a.savedWindowRect.Left)),
+				uintptr(uint32(a.savedWindowRect.Bottom-a.savedWindowRect.Top)),
+				swpFrameChanged|swpNozorder,
+			)
+		}
 		a.isFullscreen = false
 		runtime.EventsEmit(a.ctx, "fullscreen-changed", false)
 	} else {

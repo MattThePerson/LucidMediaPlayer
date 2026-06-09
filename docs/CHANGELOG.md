@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.1.27] — 2026-06-09
+- Fix: video controls no longer pushed off-screen after fullscreen exit in maximized window — `GetWindowRect` on a maximized Win32 window captures coords that include invisible frame borders extending to full monitor height; restoring via `ShowWindow(SW_SHOWMAXIMIZED)` now correctly re-maximizes to the work area (taskbar excluded)
+
 ## [0.1.26] — 2026-06-09
 - Add: subtitle track selector (CC button in player controls) — select, disable, or add external subtitle files
 - Add: subtitle text overlay rendered by the app (MPV subtitle rendering disabled)
