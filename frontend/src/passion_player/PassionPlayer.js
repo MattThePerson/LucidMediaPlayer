@@ -700,17 +700,26 @@ export class PassionPlayer {
     }
 
     flashPPIndicator(selector) {
-        const play_icon = this.$(".play-icon");
-        const pause_icon = this.$(".pause-icon");
-        play_icon.style.display = "none";
-        pause_icon.style.display = "none";
-        void play_icon.offsetWidth;
-        void pause_icon.offsetWidth;
+        [".play-icon", ".pause-icon"].forEach(sel => {
+            const el = this.$(sel);
+            el.classList.remove("shown");
+            if (el._hideTimer) { clearTimeout(el._hideTimer); el._hideTimer = null; }
+            el.style.display = "none";
+        });
 
         const flash_icon = this.$(selector);
-        flash_icon.style.display = "";
+        flash_icon.style.display = "block";
+        void flash_icon.offsetWidth;
         flash_icon.classList.add("shown");
-        setTimeout(() => flash_icon.classList.remove("shown"), 1);
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                flash_icon.classList.remove("shown");
+                flash_icon._hideTimer = setTimeout(() => {
+                    flash_icon.style.display = "none";
+                }, 500);
+            });
+        });
     }
 
     toggleFullscreen() {
@@ -1207,3 +1216,5 @@ video {
         `;
     }
 }
+
+

@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.1.30] — 2026-06-09
+- Fix: play/pause flash indicator now appears and fades out correctly — fixed `display:none` never being overridden and 1ms setTimeout collapsing before the browser could paint
+
 ## [0.1.29] — 2026-06-09
 - Fix: video controls no longer pushed off-screen in maximized window — root container now uses `Math.min(window.innerHeight, window.screen.availHeight)` instead of `100vh`; WebView2 reports monitor height (1080px) as the CSS viewport even in a maximized window, while `screen.availHeight` is always the correct work area height (1017px)
 
