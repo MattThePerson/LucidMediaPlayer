@@ -1,7 +1,10 @@
 # Changelog
 
+## [0.1.29] — 2026-06-09
+- Fix: video controls no longer pushed off-screen in maximized window — root container now uses `Math.min(window.innerHeight, window.screen.availHeight)` instead of `100vh`; WebView2 reports monitor height (1080px) as the CSS viewport even in a maximized window, while `screen.availHeight` is always the correct work area height (1017px)
+
 ## [0.1.27] — 2026-06-09
-- Fix: video controls no longer pushed off-screen after fullscreen exit in maximized window — `GetWindowRect` on a maximized Win32 window captures coords that include invisible frame borders extending to full monitor height; restoring via `ShowWindow(SW_SHOWMAXIMIZED)` now correctly re-maximizes to the work area (taskbar excluded)
+- Fix: fullscreen exit now uses `ShowWindow(SW_SHOWMAXIMIZED)` when the window was previously maximized, instead of `SetWindowPos` with the saved rect
 
 ## [0.1.26] — 2026-06-09
 - Add: subtitle track selector (CC button in player controls) — select, disable, or add external subtitle files

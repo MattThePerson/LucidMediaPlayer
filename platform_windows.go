@@ -203,13 +203,8 @@ func bringToFront(a *App) {
 func platformToggleFullscreen(a *App) {
 	if a.isFullscreen {
 		setWindowLongProc.Call(a.parentHWND, gwlStyle, uintptr(a.savedWindowStyle))
-		if a.savedWindowStyle&wsMaximize != 0 {
-			// Window was maximized before fullscreen. GetWindowRect on a maximized
-			// window captures coords that include invisible frame borders and can
-			// extend to the full monitor height (past the taskbar). Using those
-			// coords with SetWindowPos would leave the window covering the taskbar.
-			// ShowWindow(SW_SHOWMAXIMIZED) lets Windows recalculate the correct
-			// maximized rect for the work area (taskbar excluded).
+		wasMaximized := a.savedWindowStyle&wsMaximize != 0
+		if wasMaximized {
 			showWindowProc.Call(a.parentHWND, swShowMaximized)
 		} else {
 			setWindowPosProc.Call(a.parentHWND, hwndTop,
@@ -219,6 +214,7 @@ func platformToggleFullscreen(a *App) {
 				uintptr(uint32(a.savedWindowRect.Bottom-a.savedWindowRect.Top)),
 				swpFrameChanged|swpNozorder,
 			)
+			a.emitDebug("Fullscreen", "exit path: SetWindowPos with saved rect")
 		}
 		a.isFullscreen = false
 		runtime.EventsEmit(a.ctx, "fullscreen-changed", false)

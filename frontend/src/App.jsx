@@ -41,6 +41,7 @@ function App() {
     const [activeSid, setActiveSid] = useState(0);
     const [recentOverlayOpen, setRecentOverlayOpen] = useState(false);
     const [videoUIVisible, setVideoUIVisible] = useState(false);
+    const [viewportH, setViewportH] = useState(window.innerHeight);
     const [preferences, setPreferences] = useState({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false });
     // playlists: { [playlistTabId]: { items, selectedIndex, currentIndex, random, videoTabId, playedIndices } }
     const [playlists, setPlaylists] = useState({});
@@ -266,7 +267,13 @@ function App() {
         const offDebugLog = EventsOn('debug-log', (payload) => {
             debugLog(payload?.source ?? 'go', payload?.message ?? String(payload));
         });
-        const offFullscreen = EventsOn('fullscreen-changed', setIsFullscreen);
+        const offFullscreen = EventsOn('fullscreen-changed', (val) => {
+            setIsFullscreen(val);
+            setTimeout(() => {
+                setViewportH(window.innerHeight);
+                debugLog('Fullscreen', `changed→${val} innerH=${window.innerHeight}`);
+            }, 100);
+        });
         const offSubtitleText = EventsOn('subtitle-text', ({ tabID, text }) => {
             if (tabID === effectiveVideoTabIdRef.current) setSubtitleText(text);
         });
@@ -415,6 +422,8 @@ function App() {
     useEffect(() => {
         let timer;
         const onResize = () => {
+            setViewportH(window.innerHeight);
+            debugLog('Resize', `innerH=${window.innerHeight}`);
             clearTimeout(timer);
             timer = setTimeout(() => ResizeVideo().catch(() => {}), 200);
         };
@@ -755,9 +764,10 @@ function App() {
         handlePlaylistNext, handlePlaylistPrev, handlePlaylistCloseVideo, setTabs]);
 
     const isPlaylistPlaying = activeTab?.type === 'playlist' && !!playlists[activeTabId]?.videoTabId;
+    const effectiveHeight = isFullscreen ? viewportH : Math.min(viewportH, window.screen.availHeight);
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: effectiveHeight, overflow: 'hidden' }}>
             {!isFullscreen && (
                 <TabBar
                     tabs={tabs}
