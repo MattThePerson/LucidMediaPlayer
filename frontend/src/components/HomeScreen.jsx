@@ -1,6 +1,6 @@
 import appIconUrl from '../assets/images/appicon.png';
 
-export default function HomeScreen({ version, isDragging, onOpenChangelog, onOpenFile, onOpenFolderAsPlaylist, onNewPlaylist }) {
+export default function HomeScreen({ version, isDragging, onOpenChangelog, onOpenFile, onOpenFolderAsPlaylist, onNewPlaylist, profile }) {
     return (
         <div className="home-screen">
             <img className="home-icon" src={appIconUrl} />

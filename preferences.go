@@ -17,21 +17,21 @@ type Preferences struct {
 	OneVideoAtATime         bool `json:"oneVideoAtATime"`
 }
 
-func configDir() (string, error) {
-	base, err := storage.AppDataDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(base, "config")
-	return dir, os.MkdirAll(dir, 0o755)
-}
+// func configDir() (string, error) {
+// 	base, err := storage.ProfileDataDir()
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	dir := filepath.Join(base, "config")
+// 	return dir, os.MkdirAll(dir, 0o755)
+// }
 
 func loadPreferences() Preferences {
-	dir, err := configDir()
+	dir, err := storage.ProfileDataDir()
 	if err != nil {
 		return Preferences{}
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "preferences.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if err != nil {
 		return Preferences{}
 	}
@@ -43,7 +43,7 @@ func loadPreferences() Preferences {
 }
 
 func savePreferences(p Preferences) error {
-	dir, err := configDir()
+	dir, err := storage.ProfileDataDir()
 	if err != nil {
 		return err
 	}
@@ -51,5 +51,5 @@ func savePreferences(p Preferences) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "preferences.json"), data, 0o644)
+	return os.WriteFile(filepath.Join(dir, "settings.json"), data, 0o644)
 }

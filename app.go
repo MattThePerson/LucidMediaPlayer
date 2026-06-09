@@ -18,6 +18,7 @@ import (
 	"lucidplayer/internal/db"
 	"lucidplayer/internal/storage"
 	"lucidplayer/internal/thumbs"
+	"lucidplayer/internal/config"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -234,6 +235,7 @@ type App struct {
 	prefs            Preferences
 	startupFile      string
 	domReady         bool // guards against double onDomReady fire in dev hot-reload
+	// profile          string
 }
 
 func NewApp() *App {
@@ -243,7 +245,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.prefs = loadPreferences()
-	dir, err := storage.AppDataDir()
+	dir, err := storage.ProfileDataDir()
 	if err != nil {
 		a.emitDebug("db", "appDataDir failed: "+err.Error())
 	} else if err := db.InitDB(filepath.Join(dir, "db.sqlite")); err != nil {
@@ -852,6 +854,10 @@ func (a *App) ToggleFullscreen() {
 
 func (a *App) GetVersion() string {
 	return getAppVersion()
+}
+
+func (a *App) GetProfile() string {
+    return *config.Profile
 }
 
 // ResizeVideo repositions the active video window after a window resize event.
