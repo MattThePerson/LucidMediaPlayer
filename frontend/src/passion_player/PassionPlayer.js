@@ -76,6 +76,9 @@ export class PassionPlayer {
         this._destroyed = false;
         this._hideTimer = null;
 
+        this._rafId = null;
+        this._rafLastTs = 0;
+
         this._init();
     }
 
@@ -143,6 +146,7 @@ export class PassionPlayer {
 
     destroy() {
         this._destroyed = true;
+        this._stopRaf();
         this.onUIVisible?.(false);
         clearTimeout(this._hideTimer);
         if (this._keydownHandler) {
@@ -594,22 +598,26 @@ export class PassionPlayer {
     // Push playback state from an external source (headless mode).
     // Safe to call before init() completes — elements may not exist yet.
     setState({ currentTime, duration, paused, volume }) {
-        if (currentTime !== undefined) this._currentTime = currentTime;
+        if (currentTime !== undefined) {
+            this._currentTime = currentTime;
+            this._rafLastTs = performance.now(); // re-anchor rAF on each backend sync
+        }
         if (duration !== undefined) this._duration = duration;
-        if (paused !== undefined) this._paused = paused;
+        if (paused !== undefined) {
+            this._paused = paused;
+            if (!paused) {
+                this._ensureRaf();
+            } else {
+                this._stopRaf();
+            }
+        }
         if (volume !== undefined) this._volume = volume;
 
         if (!this.shadow) return;
 
-        if (this._duration > 0) {
-            const perc = (this._currentTime / this._duration) * 100;
-            const progressBar = this.$("#progress-bar-default .progress-bar");
-            if (progressBar) progressBar.style.width = perc + "%";
+        if (currentTime !== undefined || duration !== undefined) {
+            this._updateProgressDisplay();
         }
-
-        const currentEl = this.$(".time-duration-container .current");
-        if (currentEl)
-            currentEl.textContent = this._formatTime(this._currentTime);
 
         const durationEl = this.$(".time-duration-container .duration");
         if (durationEl)
@@ -622,6 +630,41 @@ export class PassionPlayer {
             if (slider) slider.value = volume;
             this.updateVolumeIcon(volume);
         }
+    }
+
+    _stopRaf() {
+        if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+        }
+    }
+
+    _ensureRaf() {
+        if (this._rafId || this._paused || this._destroyed || !this.shadow) return;
+        this._rafLastTs = performance.now();
+        const tick = (ts) => {
+            this._rafId = null;
+            if (this._paused || this._destroyed) return;
+            const delta = Math.min((ts - this._rafLastTs) / 1000, 0.5);
+            this._rafLastTs = ts;
+            if (this._duration > 0) {
+                this._currentTime = Math.min(this._currentTime + delta, this._duration);
+            }
+            this._updateProgressDisplay();
+            this._rafId = requestAnimationFrame(tick);
+        };
+        this._rafId = requestAnimationFrame(tick);
+    }
+
+    _updateProgressDisplay() {
+        if (!this.shadow) return;
+        if (this._duration > 0) {
+            const perc = (this._currentTime / this._duration) * 100;
+            const progressBar = this.$("#progress-bar-default .progress-bar");
+            if (progressBar) progressBar.style.width = perc + "%";
+        }
+        const currentEl = this.$(".time-duration-container .current");
+        if (currentEl) currentEl.textContent = this._formatTime(this._currentTime);
     }
 
     setClickToTogglePlayback(enabled) {
@@ -647,6 +690,9 @@ export class PassionPlayer {
         if (this.video) {
             this.video.currentTime = this.video.duration * perc;
         } else {
+            // Optimistically snap _currentTime so rapid consecutive seeks accumulate correctly.
+            this._currentTime = perc * this._duration;
+            this._rafLastTs = performance.now();
             this.onSeek?.(perc);
         }
         progress_bar.style.width = `${perc * 100}%`;

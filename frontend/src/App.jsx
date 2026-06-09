@@ -49,6 +49,7 @@ function App() {
     const closedTabsRef = useRef([]);
     const notifTimerRef = useRef(null);
     const promptDelayRef = useRef(null);
+    const localTimeRef = useRef(0); // optimistic seek accumulator — updated on poll + seek
     const chordActiveRef = useRef(false);
     const chordTimerRef = useRef(null);
     const autoPausedTabIdRef = useRef(null);
@@ -348,13 +349,29 @@ function App() {
         }).catch(() => {});
     }, [effectiveVideoTabId]);
 
-    // Poll playback info when a video tab or playing playlist tab is active
+    // Poll playback info when a video tab or playing playlist tab is active.
+    // Fast burst (100ms) for the first 2 seconds catches the 600ms position restore on resume,
+    // then drops to 500ms. The rAF loop in PassionPlayer interpolates between polls.
     useEffect(() => {
         if (!effectiveVideoTabId) return;
-        const id = setInterval(() => {
-            GetPlaybackInfo(effectiveVideoTabId).then(setInfo).catch(() => {});
-        }, 500);
-        return () => clearInterval(id);
+        localTimeRef.current = 0;
+        const poll = () => {
+            GetPlaybackInfo(effectiveVideoTabId).then(newInfo => {
+                setInfo(newInfo);
+                localTimeRef.current = newInfo.time_pos;
+            }).catch(() => {});
+        };
+        const fastId = setInterval(poll, 100);
+        let slowId = null;
+        const switchTimer = setTimeout(() => {
+            clearInterval(fastId);
+            slowId = setInterval(poll, 500);
+        }, 2000);
+        return () => {
+            clearInterval(fastId);
+            clearInterval(slowId);
+            clearTimeout(switchTimer);
+        };
     }, [effectiveVideoTabId]);
 
     // Load seek thumbnails on tab switch (video tabs only)
@@ -740,8 +757,11 @@ function App() {
             if (isVideoActive && info.duration > 0) {
                 const vidId = effectiveVideoTabId;
                 const seekBy = (delta) => {
-                    const newFrac = Math.max(0, Math.min(1, (info.time_pos + delta) / info.duration));
-                    Seek(vidId, newFrac).catch(console.error);
+                    // Use localTimeRef so rapid successive seeks accumulate correctly
+                    // instead of all seeking from the same stale polled position.
+                    const newTime = Math.max(0, Math.min(info.duration, localTimeRef.current + delta));
+                    localTimeRef.current = newTime;
+                    Seek(vidId, newTime / info.duration).catch(console.error);
                 };
                 if (!e.ctrlKey && !e.altKey) {
                     if (e.code === 'ArrowLeft') { e.preventDefault(); seekBy(-7); }
@@ -804,7 +824,10 @@ function App() {
                             info={info}
                             seekThumbs={activeTab?.type === 'video' ? seekThumbs : null}
                             onTogglePlayback={handleTogglePlayback}
-                            onSeek={(pos) => Seek(effectiveVideoTabId, pos).catch(console.error)}
+                            onSeek={(pos) => {
+                                if (info.duration > 0) localTimeRef.current = pos * info.duration;
+                                Seek(effectiveVideoTabId, pos).catch(console.error);
+                            }}
                             onFullscreen={() => ToggleFullscreen().catch(console.error)}
                             onVolumeChange={handleVolumeChange}
                             onUIVisible={setVideoUIVisible}

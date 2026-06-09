@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.31] — 2026-06-09
+- Fix: progress bar now interpolates smoothly at display framerate via rAF loop instead of jumping every 500ms poll
+- Fix: consecutive A/D or scroll-wheel seeks now accumulate correctly — each seek starts from the last seek target, not the last polled position
+- Fix: resumed video now shows correct position within ~100ms instead of waiting up to 1 second
+
 ## [0.1.30] — 2026-06-09
 - Fix: play/pause flash indicator now appears and fades out correctly — fixed `display:none` never being overridden and 1ms setTimeout collapsing before the browser could paint
 
