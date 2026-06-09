@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.32] — 2026-06-09
+- Feat: comprehensive keybind engine — A/D/J/L/Q/E seek, S/Space/K play-pause, W/M mute, Shift+W/S volume, X/Z frame step, Shift+X/Z speed ±0.25×, 0–9 jump to %, Home to start
+- Feat: OSD notifications bottom-left for all keybind actions (seek, volume, speed, mute)
+- Feat: seek flash OSD — tall transparent progress bar flashes at bottom when seeking with controls hidden
+- Feat: volume OSD — vertical bar on screen right flashes when changing volume with controls hidden
+- Feat: keybinds overlay — press T (or F1 in Wails) to show/hide keyboard shortcut reference; toggle button (?) top-right
+- Feat: filename displayed at top of video (auto-hides with controls)
+- Feat: drag-seek — mousedown + drag on progress bar for VLC-style scrubbing
+- Feat: FrameStep and SetPlaybackSpeed Go IPC methods wired to mpv frame-step / speed property
+- Fix: removed debug pink/teal background from seek interact zone
+- Fix: controls bar moved up (bottom: 44px) to clear the expanded seek zone
+- Fix: PassionPlayer keybinds now enabled/disabled based on whether a video tab is active
+
 ## [0.1.31] — 2026-06-09
 - Fix: progress bar now interpolates smoothly at display framerate via rAF loop instead of jumping every 500ms poll
 - Fix: consecutive A/D or scroll-wheel seeks now accumulate correctly — each seek starts from the last seek target, not the last polled position

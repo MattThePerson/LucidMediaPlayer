@@ -1,0 +1,36 @@
+// Keybinds for passion player
+{
+    "toggleControlsOverlay": "t", // default, editable
+
+    // enhanced controls
+    "back-7s": ["a", "leftArrow", "j"],
+    "back-2s": ["shift-a", "shift-leftArrow"],
+    "back-45s": "q",
+    "forward-7s": ["d", "rightArrow", "l"],
+    "forward-2s": ["shift-d", "shift-rightArrow"],
+    "forward-45s": "e",
+    "togglePlayback": ["s", "space", "k"],
+    "volumeUp": ["shift-w", "upArrow"],
+    "volumeDown": ["shift-s", "downArrow"],
+    "toggleMute": ["w", "m"],
+    "forward-1frame": "x", // will pause playback
+    "back-1frame": "z",
+    "increasePlaybackSpeed": "shift-x",
+    "decreasePlaybackSpeed": "shift-z",
+    "resetPlaybackSpeed": "shift-z-x", // shift + z + x
+
+    // advanced controls
+    "addMarker": "r",
+    "editMarker": "shift-r", // edit marker text and color
+    "removeMarker": "r+r", // while on top of a marker, press r twice to remove (timeout should be like 500ms)
+    "nextMarker": "shift-e", // jumps to next marker (or video start)
+    "prevMarker": "shift-q",
+    "spawnNewPlayhead": "c",
+    "deleteCurrentPlayhead": "c[hold]", // press for 750ms
+    "selectPlayhead": "ctrl+{1,2,3,...}",
+    "addLoopPoint": "v", // video will go back to previous marker (or video start)
+    "toggleLooping": "shift-v",
+    "removeLoopPoint": "v+v",
+    "nextFilter": "f", // video filters [none, b+w, sepia, darker, etc]
+    "prevFilter": "shift-f",
+}

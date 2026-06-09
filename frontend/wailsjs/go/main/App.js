@@ -14,6 +14,10 @@ export function CloseTab(arg1) {
   return window['go']['main']['App']['CloseTab'](arg1);
 }
 
+export function FrameStep(arg1, arg2) {
+  return window['go']['main']['App']['FrameStep'](arg1, arg2);
+}
+
 export function GetAllTabsState() {
   return window['go']['main']['App']['GetAllTabsState']();
 }
@@ -96,6 +100,10 @@ export function SavePreferences(arg1) {
 
 export function Seek(arg1, arg2) {
   return window['go']['main']['App']['Seek'](arg1, arg2);
+}
+
+export function SetPlaybackSpeed(arg1, arg2) {
+  return window['go']['main']['App']['SetPlaybackSpeed'](arg1, arg2);
 }
 
 export function SetSubtitleTrack(arg1, arg2) {

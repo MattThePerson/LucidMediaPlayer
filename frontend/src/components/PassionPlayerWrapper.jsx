@@ -6,12 +6,12 @@ export default function PassionPlayerWrapper({
     info, seekThumbs,
     onTogglePlayback, onSeek, onFullscreen, onVolumeChange, onUIVisible, clickToTogglePlayback,
     subtitleText, subtitleTracks, activeSid, onSubtitleChange, onAddSubtitleFile,
+    onFrameStep, onSpeedChange,
+    title, controlsOverlayKey, disableKeybinds,
 }) {
     const hostRef = useRef(null);
     const playerRef = useRef(null);
 
-    // Keep refs current so the long-lived PassionPlayer instance always calls
-    // the latest prop functions (avoids stale-closure when switching tabs).
     const onTogglePlaybackRef = useRef(onTogglePlayback);
     const onSeekRef = useRef(onSeek);
     const onFullscreenRef = useRef(onFullscreen);
@@ -19,6 +19,8 @@ export default function PassionPlayerWrapper({
     const onUIVisibleRef = useRef(onUIVisible);
     const onSubtitleChangeRef = useRef(onSubtitleChange);
     const onAddSubtitleFileRef = useRef(onAddSubtitleFile);
+    const onFrameStepRef = useRef(onFrameStep);
+    const onSpeedChangeRef = useRef(onSpeedChange);
     onTogglePlaybackRef.current = onTogglePlayback;
     onSeekRef.current = onSeek;
     onFullscreenRef.current = onFullscreen;
@@ -26,29 +28,28 @@ export default function PassionPlayerWrapper({
     onUIVisibleRef.current = onUIVisible;
     onSubtitleChangeRef.current = onSubtitleChange;
     onAddSubtitleFileRef.current = onAddSubtitleFile;
+    onFrameStepRef.current = onFrameStep;
+    onSpeedChangeRef.current = onSpeedChange;
 
     useEffect(() => {
         playerRef.current = new PassionPlayer({
             hostEl: hostRef.current,
-            onPlay:  () => {
-                debugLog('PlayerWrapper', `onPlay fired @ ${Date.now()}`);
-                onTogglePlaybackRef.current?.();
-            },
-            onPause: () => {
-                debugLog('PlayerWrapper', `onPause fired @ ${Date.now()}`);
-                onTogglePlaybackRef.current?.();
-            },
-            onSeek:             pos => onSeekRef.current?.(pos),
-            onFullscreen:        () => onFullscreenRef.current?.(),
-            onVolumeChange:     vol => onVolumeChangeRef.current?.(vol),
-            onUIVisible:        vis => onUIVisibleRef.current?.(vis),
-            onSubtitleChange:   sid => onSubtitleChangeRef.current?.(sid),
-            onAddSubtitleFile:   () => onAddSubtitleFileRef.current?.(),
-            disable_keybinds: true,
+            onPlay:  () => { debugLog('PlayerWrapper', `onPlay fired @ ${Date.now()}`); onTogglePlaybackRef.current?.(); },
+            onPause: () => { debugLog('PlayerWrapper', `onPause fired @ ${Date.now()}`); onTogglePlaybackRef.current?.(); },
+            onSeek:            pos => onSeekRef.current?.(pos),
+            onFullscreen:       () => onFullscreenRef.current?.(),
+            onVolumeChange:    vol => onVolumeChangeRef.current?.(vol),
+            onUIVisible:       vis => onUIVisibleRef.current?.(vis),
+            onSubtitleChange:  sid => onSubtitleChangeRef.current?.(sid),
+            onAddSubtitleFile:  () => onAddSubtitleFileRef.current?.(),
+            onFrameStep:       dir => onFrameStepRef.current?.(dir),
+            onSpeedChange:   speed => onSpeedChangeRef.current?.(speed),
+            disable_keybinds: disableKeybinds ?? false,
+            controlsOverlayKey: controlsOverlayKey ?? 't',
             quiet: true,
         });
         return () => playerRef.current?.destroy();
-    }, []);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         playerRef.current?.setState({
@@ -70,6 +71,14 @@ export default function PassionPlayerWrapper({
     useEffect(() => {
         playerRef.current?.setSubtitleState(subtitleText, subtitleTracks, activeSid);
     }, [subtitleText, subtitleTracks, activeSid]);
+
+    useEffect(() => {
+        playerRef.current?.setTitle(title ?? '');
+    }, [title]);
+
+    useEffect(() => {
+        playerRef.current?.setKeybindsEnabled(!(disableKeybinds ?? false));
+    }, [disableKeybinds]);
 
     return <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />;
 }

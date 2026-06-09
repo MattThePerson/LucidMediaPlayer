@@ -10,6 +10,8 @@ export function ClearRecentFiles():Promise<void>;
 
 export function CloseTab(arg1:string):Promise<void>;
 
+export function FrameStep(arg1:string,arg2:number):Promise<void>;
+
 export function GetAllTabsState():Promise<Record<string, boolean>>;
 
 export function GetAppDataDir():Promise<string>;
@@ -51,6 +53,8 @@ export function ResizeVideo():Promise<void>;
 export function SavePreferences(arg1:main.Preferences):Promise<void>;
 
 export function Seek(arg1:string,arg2:number):Promise<void>;
+
+export function SetPlaybackSpeed(arg1:string,arg2:number):Promise<void>;
 
 export function SetSubtitleTrack(arg1:string,arg2:number):Promise<void>;
 

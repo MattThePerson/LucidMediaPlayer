@@ -932,6 +932,32 @@ func (a *App) AddSubtitleFile(tabID, path string) error {
 	return tab.writeIPC(fmt.Sprintf(`{"command":["sub-add",%s]}`, string(pathJSON)) + "\n")
 }
 
+// FrameStep advances or reverses by one frame (mpv native command).
+func (a *App) FrameStep(tabID string, direction int) {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return
+	}
+	cmd := `{"command": ["frame-step"]}` + "\n"
+	if direction < 0 {
+		cmd = `{"command": ["frame-back-step"]}` + "\n"
+	}
+	_ = tab.writeIPC(cmd)
+}
+
+// SetPlaybackSpeed sets the playback speed multiplier for the given tab.
+func (a *App) SetPlaybackSpeed(tabID string, speed float64) {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return
+	}
+	_ = tab.writeIPC(fmt.Sprintf(`{"command": ["set_property", "speed", %g]}`+"\n", speed))
+}
+
 // OpenSubtitleFilePicker opens a native file dialog for selecting a subtitle file.
 func (a *App) OpenSubtitleFilePicker() (string, error) {
 	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{

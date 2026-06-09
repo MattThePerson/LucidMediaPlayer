@@ -8,6 +8,7 @@ import {
     ResizeVideo, SetVolume, GetSeekThumbnailData,
     GetPreferences, SavePreferences, StartSeekThumbnailGeneration, RegenerateSeekThumbnails,
     GetSubtitleState, SetSubtitleTrack, AddSubtitleFile, OpenSubtitleFilePicker,
+    FrameStep, SetPlaybackSpeed,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
@@ -571,6 +572,18 @@ function App() {
         }
     }, [activeTab?.type, activeTabId, openVideoPath, handlePlaylistAddFiles]);
 
+    const handleFrameStep = useCallback((dir) => {
+        const vidId = effectiveVideoTabId;
+        if (!vidId) return;
+        FrameStep(vidId, dir).catch(console.error);
+    }, [effectiveVideoTabId]);
+
+    const handleSpeedChange = useCallback((speed) => {
+        const vidId = effectiveVideoTabId;
+        if (!vidId) return;
+        SetPlaybackSpeed(vidId, speed).catch(console.error);
+    }, [effectiveVideoTabId]);
+
     const handleVolumeChange = useCallback((vol) => {
         const vidId = effectiveVideoTabId;
         if (!vidId) return;
@@ -623,15 +636,6 @@ function App() {
                 return;
             }
 
-            if (e.code === 'Space' && isVideoActive) {
-                e.preventDefault();
-                handleTogglePlayback();
-            }
-            if (e.code === 'KeyS' && isVideoActive && !e.ctrlKey && !e.altKey) {
-                e.preventDefault();
-                handleTogglePlayback();
-            }
-            if (e.code === 'KeyF' && isVideoActive) ToggleFullscreen().catch(console.error);
             if (e.code === 'Escape') {
                 if (isFullscreen) {
                     e.preventDefault();
@@ -753,28 +757,6 @@ function App() {
                 }
             }
 
-            // Seek shortcuts (video tabs and playing playlists, with known duration)
-            if (isVideoActive && info.duration > 0) {
-                const vidId = effectiveVideoTabId;
-                const seekBy = (delta) => {
-                    // Use localTimeRef so rapid successive seeks accumulate correctly
-                    // instead of all seeking from the same stale polled position.
-                    const newTime = Math.max(0, Math.min(info.duration, localTimeRef.current + delta));
-                    localTimeRef.current = newTime;
-                    Seek(vidId, newTime / info.duration).catch(console.error);
-                };
-                if (!e.ctrlKey && !e.altKey) {
-                    if (e.code === 'ArrowLeft') { e.preventDefault(); seekBy(-7); }
-                    if (e.code === 'ArrowRight') { e.preventDefault(); seekBy(7); }
-                    if (!e.shiftKey) {
-                        if (e.code === 'KeyA') { e.preventDefault(); seekBy(-7); }
-                        if (e.code === 'KeyD') { e.preventDefault(); seekBy(7); }
-                    } else {
-                        if (e.code === 'KeyA') { e.preventDefault(); seekBy(-2); }
-                        if (e.code === 'KeyD') { e.preventDefault(); seekBy(2); }
-                    }
-                }
-            }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
@@ -837,6 +819,11 @@ function App() {
                             activeSid={activeSid}
                             onSubtitleChange={handleSubtitleChange}
                             onAddSubtitleFile={handleAddSubtitleFile}
+                            onFrameStep={handleFrameStep}
+                            onSpeedChange={handleSpeedChange}
+                            title={activeTab?.title ?? ''}
+                            controlsOverlayKey="F1"
+                            disableKeybinds={!effectiveVideoTabId}
                         />
                         {activeTab?.type === 'video' && <Notification notification={notification} />}
                         {isPlaylistPlaying && (
