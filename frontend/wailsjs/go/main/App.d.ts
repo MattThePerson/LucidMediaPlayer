@@ -24,6 +24,8 @@ export function GetPlaybackInfo(arg1:string):Promise<main.PlaybackInfo>;
 
 export function GetPreferences():Promise<main.Preferences>;
 
+export function GetProfile():Promise<string>;
+
 export function GetRecentFiles():Promise<Array<db.RecentEntry>>;
 
 export function GetSeekThumbnailData(arg1:string):Promise<thumbs.SeekThumbnailData>;

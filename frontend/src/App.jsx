@@ -4,7 +4,7 @@ import {
     OpenPlaylistVideo, LoadFile,
     SwitchTab, CloseTab,
     TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
-    ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
+    ToggleFullscreen, GetVersion, GetProfile, GetRecentFiles, ClearRecentFiles,
     ResizeVideo, SetVolume, GetSeekThumbnailData,
     GetPreferences, SavePreferences, StartSeekThumbnailGeneration, RegenerateSeekThumbnails,
     GetSubtitleState, SetSubtitleTrack, AddSubtitleFile, OpenSubtitleFilePicker,
@@ -32,6 +32,7 @@ function App() {
     const [tabsState, setTabsState] = useState({});
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [version, setVersion] = useState('');
+    const [profile, setProfile] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [recentFiles, setRecentFiles] = useState([]);
     const [seekThumbs, setSeekThumbs] = useState(null);
@@ -261,8 +262,10 @@ function App() {
     const handlePlaylistAddFilesRef = useRef(handlePlaylistAddFiles);
     handlePlaylistAddFilesRef.current = handlePlaylistAddFiles;
 
+    // [openVideoPath]
     useEffect(() => {
-        GetVersion().then(setVersion).catch(() => {});
+        GetVersion().then(setVersion).catch(() => { });
+        GetProfile().then(setProfile).catch(() => { });
         GetRecentFiles().then(setRecentFiles).catch(() => {});
         GetPreferences().then(setPreferences).catch(() => {});
 
@@ -804,6 +807,7 @@ function App() {
                         onOpenFile={handleOpenFile}
                         onOpenFolderAsPlaylist={openFolderAsPlaylist}
                         onNewPlaylist={openNewPlaylist}
+                        profile={profile}
                     />
                 )}
                 {(activeTab?.type === 'video' || isPlaylistPlaying) && (

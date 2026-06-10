@@ -4,18 +4,28 @@ import (
 	"embed"
 	"os"
 	"strings"
+	"flag"
+	"fmt"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+
+	"lucidplayer/internal/config"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
-	// Parse the file path from "Open with" or file association launch.
+
+    // Profile
+    config.Profile = flag.String("profile", "Default", "profile to use")
+    flag.Parse()
+    fmt.Printf("starting with profile: \"%s\"\n", *config.Profile)
+
+    // Parse the file path from "Open with" or file association launch.
 	var startupFile string
 	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
 		startupFile = os.Args[1]
