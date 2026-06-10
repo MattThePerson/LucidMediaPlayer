@@ -48,7 +48,9 @@ Wails window  (Win32 parent HWND)
 ├── WebView2  (transparent, always on top — renders the React UI)
 │   ├── TabBar                36px, opaque dark background
 │   ├── HomeScreen            shown when no tab is active
-│   ├── PassionPlayerWrapper  React wrapper around PassionPlayer.js; overlaid on active video tab
+│   ├── PassionPlayerWrapper  overlaid on active video tab
+│   ├── PreferencesPage       page tab
+│   ├── ManageProfilesPage    page tab
 │   ├── DebugPage             page tab
 │   └── ChangelogPage         page tab
 └── mpv child windows   one per open video tab, shown/hidden behind WebView2
@@ -63,15 +65,30 @@ Wails window  (Win32 parent HWND)
 
 ## File map
 
-### Go (backend)
+### Go (backend — root)
 
 | File | Role |
 |---|---|
-| `main.go` | Wails app entry point, options (DragAndDrop, Windows transparency) |
-| `app.go` | All exported Go methods; Win32 helpers; mpv subprocess management; hash/restore goroutines. **Windows-only** (`//go:build windows`) |
-| `database.go` | SQLite init (`db.sqlite`); `VideoRecord` type; all DB CRUD helpers; `hashVideoFile` |
-| `storage.go` | Platform-specific AppData dir (`LucidMediaPlayer`); `RecentEntry` type. **No build constraint** |
-| `version.go` | `//go:embed wails.json` for version; `//go:embed docs/CHANGELOG.md` for changelog content |
+| `main.go` | Entry point; CLI flags (`-profile`, `-tearoff`); profile validation; single-instance check; `wails.Run` |
+| `app.go` | Exported Go methods; Win32 helpers; mpv subprocess management; hash/restore goroutines. **Windows-only** (`//go:build windows`) |
+| `app_profiles.go` | Profile-related exported methods (`GetProfileInfo`, `GetProfiles`, `CreateProfile`, etc.) |
+| `profiles.go` | `ProfileEntry` type; `loadProfiles`/`saveProfiles`; `generateProfileID` |
+| `preferences.go` | `Preferences` struct; `loadPreferences`/`savePreferences` |
+| `profile_manager.go` | `launchVisible(args...)` — spawns a new visible app instance (no HideWindow); `launchDetached` for mpv/ffmpeg |
+| `singelinstance_windows.go` | Named-pipe single-instance server/client (note typo in filename: "singel") |
+| `singleinstance_linux.go` | Unix-socket single-instance server/client |
+| `platform_windows.go` | Windows-specific Win32 helpers |
+| `platform_linux.go` | Linux stubs |
+| `version.go` | `//go:embed wails.json` for version; `//go:embed docs/CHANGELOG.md` for changelog |
+
+### Go (internal packages)
+
+| Package | Role |
+|---|---|
+| `internal/db/db.go` | SQLite init; `VideoRecord` type; all DB CRUD helpers (`UpsertFilepath`, `SavePosition`, `GetRecents`, etc.); `HashVideoFile` |
+| `internal/storage/storage.go` | `AppDataDir()`, `ProfileDataDir()` — platform-specific data paths; `RecentEntry` type |
+| `internal/config/config.go` | CLI flag values (`Profile *string`) shared across packages |
+| `internal/thumbs/` | Seek thumbnail generation (spritesheet + VTT) |
 
 ### Frontend
 
@@ -80,25 +97,31 @@ Wails window  (Win32 parent HWND)
 | `frontend/src/App.jsx` | Root component — all global state, effects, keyboard shortcuts, tab logic |
 | `frontend/src/style.css` | All CSS (single file) |
 | `frontend/src/debug.js` | Global debug log store (`useSyncExternalStore`); `debugLog()` and `getDebugLogs()` callable from anywhere |
-| `frontend/src/components/TabBar.jsx` | Tab bar, hamburger menu, Recently Opened submenu, drag-reorder |
-| `frontend/src/components/HomeScreen.jsx` | Home screen with inline SVG logo, version link, drag-over overlay |
-| `frontend/src/components/PassionPlayerWrapper.jsx` | Thin React wrapper around `PassionPlayer.js`; ref-based callbacks to avoid stale closure on tab switch |
-| `frontend/src/passion_player/PassionPlayer.js` | **Pure-JS, no JSX, no jQuery** video player — Shadow DOM, fully self-contained CSS via `getStyles()`. Supports headless mode (no `<video>`, external callbacks) for use with mpv backend. Also usable standalone in non-React projects (symlink-friendly). |
-| `frontend/src/components/DebugPage.jsx` | Live log viewer using `useDebugLogs()` hook |
-| `frontend/src/components/ChangelogPage.jsx` | Renders embedded CHANGELOG.md with simple line parser |
+| `frontend/src/components/TabBar.jsx` | Tab bar, hamburger menu, profile flyout submenu, drag-reorder, tear-off detection |
+| `frontend/src/components/HomeScreen.jsx` | Home screen with inline SVG logo, profile badge, drag-over overlay |
+| `frontend/src/components/PassionPlayerWrapper.jsx` | Thin React wrapper around `PassionPlayer.js`; ref-based callbacks to avoid stale closures on tab switch |
+| `frontend/src/passion_player/PassionPlayer.js` | **Pure-JS, no JSX** video player — Shadow DOM, self-contained CSS. Headless mode (no `<video>`) used with mpv; HTML5 mode available for standalone use |
+| `frontend/src/components/ManageProfilesPage.jsx` | Profile list with drag-reorder, inline rename, color picker, open/delete; page-level delete modal |
+| `frontend/src/components/PreferencesPage.jsx` | Settings form (seek thumbnails, single-instance, click-to-toggle, etc.) |
+| `frontend/src/components/PlaylistPage.jsx` | Playlist manager with drag-reorder, random, play/remove |
+| `frontend/src/components/RecentFilesOverlay.jsx` | Modal overlay showing recent files; opened with `Ctrl+R` |
+| `frontend/src/components/Notification.jsx` | Transient in-player notification banner |
+| `frontend/src/components/DebugPage.jsx` | Live log viewer |
+| `frontend/src/components/ChangelogPage.jsx` | Renders embedded CHANGELOG.md |
 | `frontend/wailsjs/go/main/App.js` | **Auto-generated** JS bindings — do not hand-edit unless `wails dev` isn't running |
 | `frontend/wailsjs/go/main/App.d.ts` | **Auto-generated** TypeScript types |
-| `frontend/wailsjs/go/models.ts` | **Auto-generated** model classes (`PlaybackInfo`, `RecentEntry`) |
+| `frontend/wailsjs/go/models.ts` | **Auto-generated** model classes |
 
 ### Data / config
 
 | Path | Contents |
 |---|---|
-| `wails.json` | App name, version (source of truth for version number) |
+| `wails.json` | App name, version (source of truth) |
 | `docs/CHANGELOG.md` | User-facing changelog, embedded into the binary |
-| `%APPDATA%\LucidMediaPlayer\db.sqlite` | SQLite database — videos table (hash, filepath, last_pos, etc.) |
-| `%APPDATA%\LucidMediaPlayer\config\` | Future: `preferences.json`, `keybinds.json` |
-| `%APPDATA%\LucidMediaPlayer\media\<hash>\` | Future: seek thumbnails, waveform data per video |
+| `%APPDATA%\LucidMediaPlayer\profiles.json` | Global profile registry — ordered `[{id, name, color}]` |
+| `%APPDATA%\LucidMediaPlayer\profiles\<id>\db.sqlite` | Per-profile SQLite database |
+| `%APPDATA%\LucidMediaPlayer\profiles\<id>\settings.json` | Per-profile preferences |
+| `%APPDATA%\LucidMediaPlayer\media\<hash>\` | Seek thumbnail spritesheet + VTT (global, not profile-specific) |
 
 ---
 
@@ -107,39 +130,85 @@ Wails window  (Win32 parent HWND)
 Tabs are frontend-only state in `App.jsx`:
 
 ```js
-// { id: string, type: 'video'|'debug'|'changelog', title: string }
+// { id: string, type: 'video'|'playlist'|'debug'|'changelog'|'preferences'|'manageprofiles', title: string }
 const [tabs, setTabs] = useState([]);
 ```
 
 - **Video tabs** have a matching entry in Go's `app.tabs` map (keyed by the same `id`). All Go methods (`SwitchTab`, `CloseTab`, etc.) operate on this id.
-- **Page tabs** (`debug`, `changelog`) are frontend-only — Go doesn't know about them. When a page tab is active, the frontend calls `SwitchTab('')` to hide all mpv windows.
-- Page tabs are singletons — opening one that already exists focuses it instead of creating a duplicate.
+- **Playlist tabs** are frontend-managed; they may own a video tab (`videoTabId`) for the currently playing item.
+- **Page tabs** (`debug`, `changelog`, `preferences`, `manageprofiles`) are frontend-only — Go doesn't know about them. When a page tab is active, the frontend calls `SwitchTab('')` to hide all mpv windows.
+- Page tabs are singletons — opening one that already exists focuses it.
 
 ---
 
-## Exported Go methods (app.go)
+## Exported Go methods
+
+### app.go
 
 | Method | Purpose |
 |---|---|
-| `OpenVideo(path) → tabID` | Launches mpv, connects IPC, pre-positions child window, upserts filepath in DB, starts background hash |
+| `OpenVideo(path) → tabID` | Launches mpv, connects IPC, positions child window, upserts filepath in DB, starts background hash |
+| `OpenPlaylistVideo(path) → tabID` | Like `OpenVideo` but keeps previous video tab running |
+| `LoadFile(tabID, path)` | Replaces the file playing in an existing tab (for playlists) |
 | `SwitchTab(tabID)` | Hides all child windows, shows the requested one; `""` = home screen |
 | `CloseTab(tabID)` | Saves position to DB, sends IPC quit, closes conn, kills process |
+| `TearOffTab(tabID)` | Saves position, closes tab, spawns new instance with same file via `launchVisible` |
 | `TogglePlayback(tabID)` | Sends `cycle pause` via IPC |
 | `Seek(tabID, pos)` | Absolute seek; `pos` is 0–1 fraction of duration |
-| `GetPlaybackInfo(tabID) → PlaybackInfo` | Returns `{time_pos, duration, paused}` from live IPC state |
-| `GetAllTabsState() → map[id]bool` | Returns `isPlaying` for all tabs (for tab indicators) |
+| `GetPlaybackInfo(tabID) → PlaybackInfo` | Returns `{time_pos, duration, paused, volume}` from live IPC state |
+| `GetAllTabsState() → map[id]bool` | Returns `isPlaying` for all tabs |
+| `SetVolume(tabID, volume)` | Sets mpv volume (0–100) |
+| `SetPlaybackSpeed(tabID, speed)` | Sets mpv playback speed |
+| `SetVideoFilter(tabID, vfStr)` | Applies mpv video filter string |
+| `FrameStep(tabID, direction)` | Single-frame step (+1 / -1) |
 | `ToggleFullscreen()` | Wails fullscreen + emits `fullscreen-changed` event + calls `ResizeVideo()` |
 | `ResizeVideo()` | `MoveWindow` on active child window to correct size/offset |
-| `OpenFilePicker() → path` | Native file open dialog |
+| `OpenFilePicker() → path` | Native single-file open dialog |
+| `OpenFilePickerMultiple() → []path` | Native multi-file open dialog |
+| `OpenFolderPicker() → path` | Native folder picker |
+| `GetMediaFilesInFolder(path) → []path` | Lists media files in a directory |
 | `GetVersion() → string` | From embedded `wails.json` |
 | `GetChangelog() → string` | From embedded `docs/CHANGELOG.md` |
 | `GetRecentFiles() → []RecentEntry` | Up to 10 entries from DB ordered by `last_opened DESC` |
-| `ClearRecentFiles()` | Sets `last_opened=NULL` for all rows (preserves hash + position data) |
-| `GetAppDataDir() → string` | Returns resolved AppData path (useful for diagnostics) |
+| `ClearRecentFiles()` | Sets `last_opened=NULL` for all rows |
+| `GetAppDataDir() → string` | Returns resolved AppData path (diagnostics) |
+| `GetPreferences() → Preferences` | Reads `settings.json` for current profile |
+| `SavePreferences(p)` | Writes `settings.json` for current profile |
+| `StartSeekThumbnailGeneration(tabID)` | Triggers background thumbnail generation for the video |
+| `RegenerateSeekThumbnails(tabID)` | Forces regeneration even if spritesheet exists |
+| `GetSeekThumbnailData(tabID) → SeekThumbnailData` | Returns base64 spritesheet + VTT for the frontend |
+| `GetSubtitleState(tabID) → SubtitleState` | Returns available tracks + active SID |
+| `SetSubtitleTrack(tabID, sid)` | Switches subtitle track |
+| `AddSubtitleFile(tabID, path)` | Loads an external subtitle file |
+| `OpenSubtitleFilePicker() → path` | Native subtitle file picker |
+
+### app_profiles.go
+
+| Method | Purpose |
+|---|---|
+| `GetProfileInfo() → ProfileInfo` | Returns `{id, name, color}` for the active profile |
+| `GetProfiles() → []ProfileEntry` | Full profile list from `profiles.json` |
+| `CreateProfile(name, color) → ProfileEntry` | Adds new profile; ID = sanitized name |
+| `RenameProfile(id, newName)` | Updates `name` in registry (ID/folder unchanged) |
+| `SetProfileColor(id, color)` | Updates `color` in registry |
+| `DeleteProfile(id)` | Removes from registry; cannot delete active profile; data folder left on disk |
+| `ReorderProfiles(ids)` | Reorders registry to match supplied ID slice |
+| `OpenProfile(id)` | Spawns new instance with `-profile <id>` via `launchVisible` |
 
 ---
 
-## Database (database.go)
+## Profile system
+
+- **Global registry**: `%APPDATA%\LucidMediaPlayer\profiles.json` — ordered `[{id, name, color}]`. Read/written by `profiles.go`.
+- **Per-profile data**: `profiles/<id>/db.sqlite` + `settings.json` — determined by `internal/storage.ProfileDataDir()` using `*config.Profile`.
+- **Profile ID**: sanitized display name at creation time (strips `<>:"/\|?*`, handles collisions). **Never changes on rename** — folder name is always the original ID.
+- **CLI flags**: `-profile <id>` (default `"default"`); `-tearoff` (internal — skips single-instance check when spawning from a tab tear-off).
+- **Multi-instance**: single-instance pipes are scoped to profile (`\\.\pipe\LucidMediaPlayer-<profileID>`), so multiple profiles can run simultaneously.
+- **Tear-off**: dragging a video tab below y=80px calls `TearOffTab` → saves position → closes tab → `launchVisible(path, -profile, id, -tearoff)`. Position restores automatically via the DB hash/filepath lookup.
+
+---
+
+## Database (internal/db/db.go)
 
 ### Schema
 
@@ -155,91 +224,33 @@ CREATE TABLE IF NOT EXISTS videos (
 );
 ```
 
-### Key CRUD helpers
-
-| Function | Purpose |
-|---|---|
-| `initDB()` | Opens/creates `db.sqlite`, runs `CREATE TABLE IF NOT EXISTS` |
-| `dbUpsertFilepath(path, openedAt)` | Upserts filepath row, returns full `*VideoRecord` (including any saved hash/pos) |
-| `dbGetByHash(hash)` | Looks up a record by file hash |
-| `dbSetHash(id, hash)` | Writes hash onto an existing filepath row |
-| `dbMergeHashRecord(hashID, fpID, newPath, openedAt)` | Deletes stale filepath row, updates hash row's path — used on rename detection |
-| `dbSavePosition(id, pos)` | `UPDATE videos SET last_pos=?` |
-| `dbGetRecents(limit)` | `SELECT ... ORDER BY last_opened DESC LIMIT ?` |
-| `dbClearRecents()` | `UPDATE videos SET last_opened=NULL` |
-
 ### File hashing
 
-`hashVideoFile(path)` in `database.go` reads **3×64 KB chunks** (start, middle, end of file) and returns a SHA-256 hex string. Sub-millisecond for typical files; the same hash is produced regardless of filename or path, so data survives renames and moves.
+`HashVideoFile(path)` reads **3×64 KB chunks** (start, middle, end) and returns a SHA-256 hex string. Sub-millisecond for typical files; same hash regardless of filename, so data survives renames and moves.
 
 ### Open-video DB flow
 
-1. `dbUpsertFilepath(path, now)` — immediate; updates recents and returns any existing record.
-2. If the record already has a `hash`: known file — restore `last_pos` if > 0 via `restorePosition` (600ms delayed IPC seek).
-3. If no hash: start `hashAndLookup` goroutine in background:
-   - Hash file → if hash matches an existing DB row, merge records and restore position.
-   - If no match, write the hash onto the current filepath row (`dbSetHash`).
+1. `UpsertFilepath(path, now)` — immediate; updates recents, returns existing record if any.
+2. If record has a `hash`: restore `last_pos` via `restorePosition` (600ms delayed IPC seek).
+3. If no hash: background `hashAndLookup` goroutine → merge records on hash match, or write hash onto filepath row.
 
 ### Position save triggers
 
-- **On pause** (IPC `property-change pause=true`): `go dbSavePosition(dbID, timePos)` from `startReader`.
-- **On tab close** (`CloseTab`): synchronous `dbSavePosition` before IPC quit.
-- **On shutdown**: synchronous `dbSavePosition` for all open tabs.
-
-### `TabInstance` DB fields
-
-```go
-dbID int64  // videos.id; 0 until DB upsert completes
-hash string // hex SHA-256; "" until background hash completes
-```
-
-Both fields are written before goroutines start (or under `stateMu`) to avoid data races.
+- **On pause** (IPC `property-change pause=true`): async `SavePosition` from `startReader`.
+- **On tab close / tear-off**: synchronous `SavePosition` before IPC quit.
+- **On shutdown**: synchronous `SavePosition` for all open tabs.
 
 ---
 
 ## PassionPlayer (frontend/src/passion_player/PassionPlayer.js)
 
-Pure-JS, no JSX, no jQuery. Uses Shadow DOM so styles are fully encapsulated. CSS is inlined in `getStyles()` — the file is self-contained with no external dependencies, making it safe to symlink into other (non-React) projects.
+Pure-JS, no JSX. Uses Shadow DOM with inlined CSS (`getStyles()`) — fully self-contained, safe to symlink into non-React projects.
 
-### Modes
+- **HTML5 mode**: pass `src` option → real `<video>` inside Shadow DOM.
+- **Headless mode** (used in Wails): no `<video>`; UI driven by `player.setState({currentTime, duration, paused})` and fires `onPlay`/`onPause`/`onSeek`/`onFullscreen` callbacks.
+- Shadow root persists across `destroy()` (React Strict Mode safe): `this.shadow = el.shadowRoot ?? el.attachShadow({mode:'open'}); this.shadow.innerHTML = '';`
 
-- **HTML5 mode**: pass `src` option — creates a real `<video>` element inside Shadow DOM.
-- **Headless mode** (used in Wails): no `<video>`; UI reflects external state via `setState()` and fires `onPlay`/`onPause`/`onSeek`/`onFullscreen` callbacks.
-
-### Key API
-
-```js
-new PassionPlayer({
-    hostEl: domElement,        // mount target (React ref or getElementById result)
-    onPlay, onPause,           // fired when user clicks play/pause
-    onSeek: pos => ...,        // pos is 0–1 fraction
-    onFullscreen: () => ...,
-    disable_keybinds: true,    // skip internal Space/F handlers (host manages shortcuts)
-})
-
-player.setState({ currentTime, duration, paused })  // push mpv state into UI
-player.toggle_playback()   // programmatic toggle
-player.destroy()           // cleanup (called by React unmount)
-```
-
-### Shadow DOM init guard
-
-```js
-// Handles React Strict Mode double-mount — shadow root persists across destroy()
-this.shadow = this.root_element.shadowRoot ?? this.root_element.attachShadow({ mode: 'open' });
-this.shadow.innerHTML = '';
-```
-
-### PassionPlayerWrapper.jsx
-
-Thin React wrapper in `frontend/src/components/`. Uses **ref-based callbacks** so the long-lived `PassionPlayer` instance always calls the current tab's functions even after tab switches:
-
-```jsx
-const onTogglePlaybackRef = useRef(onTogglePlayback);
-onTogglePlaybackRef.current = onTogglePlayback; // updated every render
-```
-
-Mount-once `useEffect` creates the player; a `[info]` effect calls `setState`.
+`PassionPlayerWrapper.jsx` uses **ref-based callbacks** (`onTogglePlaybackRef.current = onTogglePlayback`) so the long-lived player instance always calls the current tab's handlers after tab switches. Mount-once `useEffect` creates the player; a `[info]` effect calls `setState`.
 
 ---
 
@@ -247,7 +258,7 @@ Mount-once `useEffect` creates the player; a `[info]` effect calls `setState`.
 
 ### `tabBarHeight = 36` (app.go)
 
-Must match the `.tab-bar { height: 36px }` CSS value. Used in `positionChildWindow` to offset the mpv child window below the tab bar. **If you change the CSS height, update the Go constant too.**
+Must match `.tab-bar { height: 36px }` in CSS. Used in `positionChildWindow` to offset the mpv child window below the tab bar. **If you change the CSS height, update the Go constant too.**
 
 ### File drop: use JS-side `OnFileDrop`, not Go's `runtime.OnFileDrop`
 
@@ -274,11 +285,11 @@ func (a *App) onDomReady(ctx context.Context) {
 
 ### Play/pause indicator lag
 
-After calling `TogglePlayback`, the frontend immediately schedules a 50ms re-poll of `GetPlaybackInfo` + `GetAllTabsState` to update both the button icon and the tab indicator without waiting for the next 500ms / 1000ms poll cycle.
+After `TogglePlayback`, the frontend immediately schedules a 50ms re-poll of `GetPlaybackInfo` + `GetAllTabsState` to update the button icon and tab indicator without waiting for the next 500ms / 1000ms poll cycle.
 
 ### Window resize debounce
 
-The `window.resize` listener uses a **200ms debounce** before calling `ResizeVideo()`. A shorter debounce causes mpv's renderer to restart on every resize event, creating severe glitching. During active drag the video may briefly cover the tab bar (mpv auto-resizes to fill the parent); the correct position is restored when the debounce fires. The proper long-term fix is a wrapper window approach.
+The `window.resize` listener uses a **200ms debounce** before calling `ResizeVideo()`. A shorter debounce causes mpv's renderer to restart on every resize event, creating severe glitching. During active drag the video may briefly cover the tab bar (mpv auto-resizes); the correct position is restored when the debounce fires.
 
 ### AppData folder name is PascalCase
 
@@ -289,16 +300,11 @@ The AppData directory is `LucidMediaPlayer` (no spaces). The window title is `"L
 ## Debug logging
 
 ```js
-// Frontend — callable from any component, no prop drilling needed
 import { debugLog } from '../debug';
 debugLog('MyComponent', 'something happened');
 
-// Get all logs (e.g. for clipboard copy)
-import { getDebugLogs } from '../debug';
-
 // Go backend
-a.emitDebug("source", "message")
-// → emits 'debug-log' event → JS EventsOn handler → debugLog()
+a.emitDebug("source", "message")  // → emits 'debug-log' event → JS EventsOn → debugLog()
 ```
 
 View logs in the **Debug** page tab (hamburger → Debug). `Ctrl+Shift+C` copies all entries to clipboard.
@@ -307,19 +313,24 @@ View logs in the **Debug** page tab (hamburger → Debug). `Ctrl+Shift+C` copies
 
 ## IPC: mpv named pipe
 
-Each video tab gets `\\.\pipe\mpvsocket-<tabID>`. Communication is newline-delimited JSON.
+Each video tab gets `\\.\pipe\mpvsocket-<tabID>`. Newline-delimited JSON. The reader goroutine (`startReader`) updates `tab.timePos`, `tab.duration`, `tab.paused` under `stateMu` and fires `SavePosition` asynchronously when `pause=true` is received. Observed properties: `time-pos` (id 1), `duration` (id 2), `pause` (id 3).
 
-```go
-// Send command
-tab.writeIPC(`{"command": ["cycle", "pause"]}` + "\n")
+---
 
-// Observer setup (in startReader goroutine)
-{"command": ["observe_property", 1, "time-pos"]}
-{"command": ["observe_property", 2, "duration"]}
-{"command": ["observe_property", 3, "pause"]}
-```
+## Longevity concerns
 
-The reader goroutine (`tab.startReader()`) updates `tab.timePos`, `tab.duration`, `tab.paused` under `stateMu`. It also fires `dbSavePosition` asynchronously when `pause=true` is received.
+| Component | Risk | Notes |
+|---|---|---|
+| **mpv IPC protocol** | Low | JSON IPC format stable since ~2014; no breaking changes in a decade |
+| **mpv HWND embedding** (`--wid`) | Medium–High | Win32-specific; does not work on Wayland at all; X11 XEmbed is legacy and GTK4 dropped it. The proper fix is **libmpv + render API**, but that requires CGO and a bundled `.dll`/`.so`, and integrating a GL render surface with WebView2 is a near-rewrite of the UI stack |
+| **Wails v2** | Medium | Wails v2→v3 had significant breaking changes (new runtime API, different window model). Upgrading would touch `main.go`, `app.go`, all `runtime.*` calls, and the JS bindings |
+| **`go-winio`** | Low | Stable, Microsoft-maintained; named pipes are a Win32 primitive unlikely to change |
+| **`modernc.org/sqlite`** | Low | Pure-Go SQLite; tracks upstream SQLite releases; no CGO |
+| **React + plain CSS** | Very low | CSS is a W3C standard; React is dominant and stable. The most durable layer in the stack |
+| **WebView2 (Windows)** | Low | Evergreen, auto-updated with Edge; Microsoft has strong backward-compat guarantees |
+| **WebKit2GTK (Linux)** | Low–Medium | Wails uses it on Linux; version requirements can drift with distros |
+
+**mpv vs. libmpv:** The current subprocess approach works indefinitely on Windows. For true cross-platform (especially Wayland), the right path is `libmpv` with its render API — mpv renders frames into a GL context you provide, with no OS window embedding needed. Go binding: `github.com/gen2brain/go-mpv`. Tradeoffs: requires CGO (breaks pure-Go build), requires bundling `libmpv.dll`/`.so` (~30MB), and feeding frames from a GL context into WebView2 is non-trivial. A proper libmpv integration would likely mean replacing WebView2 with a native GL window and a different UI toolkit.
 
 ---
 
@@ -333,5 +344,7 @@ The reader goroutine (`tab.startReader()`) updates `tab.timePos`, `tab.duration`
 | `Ctrl+W` | Close active tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Cycle tabs |
 | `Ctrl+Shift+PageUp/Down` | Move active tab left/right |
+| `Ctrl+R` | Open Recent Files overlay |
 | `Ctrl+Shift+C` | Copy all debug log entries to clipboard |
 | Middle-click tab | Close tab |
+| Drag tab below y=80px | Tear off video tab to new window |
