@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.11] — 2026-06-10
+- Fix: "Open file location" — Explorer window now receives focus via AllowSetForegroundWindow(ASFW_ANY), letting Explorer foreground itself without polling
+
+## [0.2.10] — 2026-06-10
+- Fix: "Open file location" now correctly selects the file in Explorer for paths with spaces; cross-platform support added (macOS: `open -R`, Linux: nautilus → xdg-open fallback); debug logs emitted on reveal
+
+## [0.2.9] — 2026-06-10
+- Feat: tab context menu extended — Play/Pause toggle at top, "Open file location" (reveals in Explorer), "Close tab" (red) at bottom
+- Feat: "Undo rename" always shown but greyed when no history; hovering shows old filename as tooltip popup
+
+## [0.2.8] — 2026-06-10
+- Feat: F2 opens inline rename bar below tab bar; only stem is editable; bash readline keybindings (Ctrl+A/E/F/B/K/U/W/D, Alt+F/B/D)
+- Feat: right-click tab context menu with "Rename file" and "Undo rename: <name>" (full per-tab session history)
+- Feat: rename reloads all tabs playing the same file from their saved positions; updates DB filepath; syncs active playlist entry
+- Fix: keyboard shortcuts (Space, F, etc.) blocked while rename bar is open
+
 ## [0.2.7] — 2026-06-10
 - Fix: WebView2 keyboard focus now routed through Win32 message thread via PostMessage (SetFocus was silently failing from Go goroutine)
 - Fix: home screen text is no longer selectable

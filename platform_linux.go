@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	goruntime "runtime"
+	"path/filepath"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -75,6 +77,26 @@ func platformToggleFullscreen(a *App) {
 		runtime.WindowFullscreen(a.ctx)
 		a.isFullscreen = true
 		runtime.EventsEmit(a.ctx, "fullscreen-changed", true)
+	}
+}
+
+// platformRevealFile opens the file manager with the given file selected.
+// macOS: open -R; Linux: nautilus --select, falling back to xdg-open on the directory.
+func platformRevealFile(a *App, path string) {
+	dir := filepath.Dir(path)
+	if goruntime.GOOS == "darwin" {
+		a.emitDebug("reveal", fmt.Sprintf("macOS: open -R %s", path))
+		if err := exec.Command("open", "-R", path).Start(); err != nil {
+			a.emitDebug("reveal", fmt.Sprintf("error: %v", err))
+		}
+		return
+	}
+	a.emitDebug("reveal", fmt.Sprintf("Linux: nautilus --select %s", path))
+	if err := exec.Command("nautilus", "--select", path).Start(); err != nil {
+		a.emitDebug("reveal", fmt.Sprintf("nautilus failed (%v), fallback xdg-open %s", err, dir))
+		if err2 := exec.Command("xdg-open", dir).Start(); err2 != nil {
+			a.emitDebug("reveal", fmt.Sprintf("xdg-open error: %v", err2))
+		}
 	}
 }
 

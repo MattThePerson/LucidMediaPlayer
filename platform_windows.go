@@ -29,10 +29,11 @@ var (
 	getMonitorInfoProc  = modUser32.NewProc("GetMonitorInfoW")
 	setWindowLongPtrProc = modUser32.NewProc("SetWindowLongPtrW")
 	callWindowProcProc   = modUser32.NewProc("CallWindowProcW")
-	setForegroundProc       = modUser32.NewProc("SetForegroundWindow")
-	setFocusProc            = modUser32.NewProc("SetFocus")
-	postMessageProc         = modUser32.NewProc("PostMessageW")
-	getForegroundWindowProc = modUser32.NewProc("GetForegroundWindow")
+	setForegroundProc            = modUser32.NewProc("SetForegroundWindow")
+	setFocusProc                 = modUser32.NewProc("SetFocus")
+	postMessageProc              = modUser32.NewProc("PostMessageW")
+	getForegroundWindowProc      = modUser32.NewProc("GetForegroundWindow")
+	allowSetForegroundWindowProc = modUser32.NewProc("AllowSetForegroundWindow")
 )
 
 const (
@@ -267,6 +268,25 @@ func platformToggleFullscreen(a *App) {
 		runtime.EventsEmit(a.ctx, "fullscreen-changed", true)
 	}
 	time.AfterFunc(50*time.Millisecond, a.ResizeVideo)
+}
+
+// platformRevealFile opens Explorer with the file selected and brings it to the foreground.
+// SysProcAttr.CmdLine bypasses Go's argument escaping, which breaks /select, for paths with spaces.
+// AllowSetForegroundWindow(ASFW_ANY) lets Explorer's own window-creation code foreground the new
+// window without our process needing to poll for it.
+func platformRevealFile(a *App, path string) {
+	cmdLine := `explorer.exe /select,"` + path + `"`
+	a.emitDebug("reveal", fmt.Sprintf("Windows: %s", cmdLine))
+
+	// Grant all processes foreground permission so Explorer can bring its new window to front.
+	const asfwAny = ^uintptr(0)
+	allowSetForegroundWindowProc.Call(asfwAny)
+
+	cmd := exec.Command("explorer.exe")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdLine}
+	if err := cmd.Start(); err != nil {
+		a.emitDebug("reveal", fmt.Sprintf("error: %v", err))
+	}
 }
 
 // platformResizeVideo repositions the active mpv window after a resize event.

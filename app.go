@@ -1004,6 +1004,102 @@ func (a *App) SetVideoFilter(tabID string, vfStr string) {
 	_ = tab.writeIPC(fmt.Sprintf(`{"command": ["vf", "set", %q]}`+"\n", vfStr))
 }
 
+// RenameVideoFile renames the underlying file on disk for the given tab and reloads
+// all affected tabs (any tab whose filePath matches the old path) from their saved positions.
+func (a *App) RenameVideoFile(initiatingTabID, newStem string) (string, error) {
+	newStem = strings.TrimSpace(newStem)
+	if newStem == "" {
+		return "", fmt.Errorf("filename cannot be empty")
+	}
+	if strings.ContainsAny(newStem, `<>:"/\|?*`) {
+		return "", fmt.Errorf("filename contains invalid characters")
+	}
+
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[initiatingTabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return "", fmt.Errorf("tab not found")
+	}
+
+	tab.stateMu.RLock()
+	oldPath := tab.filePath
+	tab.stateMu.RUnlock()
+
+	dir := filepath.Dir(oldPath)
+	ext := filepath.Ext(oldPath)
+	newPath := filepath.Join(dir, newStem+ext)
+
+	if newPath == oldPath {
+		return oldPath, nil
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return "", fmt.Errorf("a file with that name already exists")
+	}
+
+	// Capture state for every tab playing this file before the rename.
+	type tabState struct {
+		id     string
+		tab    *TabInstance
+		pos    float64
+		paused bool
+		dbID   int64
+	}
+	a.tabsMu.RLock()
+	var affected []tabState
+	for id, t := range a.tabs {
+		t.stateMu.RLock()
+		if t.filePath == oldPath {
+			affected = append(affected, tabState{id: id, tab: t, pos: t.timePos, paused: t.paused, dbID: t.dbID})
+		}
+		t.stateMu.RUnlock()
+	}
+	a.tabsMu.RUnlock()
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return "", fmt.Errorf("rename failed: %w", err)
+	}
+
+	newPathJSON, _ := json.Marshal(newPath)
+	activeID := a.activeTabID
+
+	for _, ts := range affected {
+		opts := fmt.Sprintf("start=%.3f", ts.pos)
+		if ts.paused {
+			opts += ",pause=yes"
+		}
+		optsJSON, _ := json.Marshal(opts)
+		_ = ts.tab.writeIPC(fmt.Sprintf(
+			`{"command": ["loadfile", %s, "replace", %s]}`,
+			string(newPathJSON), string(optsJSON),
+		) + "\n")
+
+		ts.tab.stateMu.Lock()
+		ts.tab.filePath = newPath
+		ts.tab.stateMu.Unlock()
+
+		if ts.dbID != 0 {
+			if err := db.UpdateFilepathByID(ts.dbID, newPath); err != nil {
+				a.emitDebug("rename", "db update error: "+err.Error())
+			}
+		}
+
+		if ts.id == activeID {
+			runtime.WindowSetTitle(a.ctx, "Lucid Media Player - "+filepath.Base(newPath))
+		}
+	}
+
+	a.emitDebug("rename", fmt.Sprintf("renamed %s → %s (%d tab(s))", filepath.Base(oldPath), filepath.Base(newPath), len(affected)))
+	return newPath, nil
+}
+
+// RevealInExplorer opens the platform file manager with the given file selected.
+func (a *App) RevealInExplorer(path string) {
+	path = filepath.FromSlash(path)
+	a.emitDebug("reveal", fmt.Sprintf("path=%q", path))
+	platformRevealFile(a, path)
+}
+
 // OpenSubtitleFilePicker opens a native file dialog for selecting a subtitle file.
 func (a *App) OpenSubtitleFilePicker() (string, error) {
 	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{

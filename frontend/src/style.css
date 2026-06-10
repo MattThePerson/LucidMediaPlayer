@@ -1232,3 +1232,145 @@ body {
     justify-content: flex-end;
     margin-top: 4px;
 }
+
+/* ── Rename bar ──────────────────────────────────────────────────────────── */
+
+.rename-backdrop {
+    position: fixed;
+    inset: 36px 0 0 0;
+    z-index: 199;
+}
+
+.rename-bar {
+    position: fixed;
+    top: 36px;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    height: 34px;
+    background: rgba(18, 18, 18, 0.97);
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 6px;
+    backdrop-filter: blur(4px);
+}
+
+.rename-bar-label {
+    font-size: 12px;
+    color: #666;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.rename-bar-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #555;
+    outline: none;
+    color: #eee;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 2px 0;
+    min-width: 0;
+}
+.rename-bar-input:focus { border-bottom-color: #4d8cff; }
+.rename-bar-input.invalid { border-bottom-color: #e03050; }
+
+.rename-bar-ext {
+    font-size: 13px;
+    color: #555;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.rename-bar-btn {
+    background: none;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #888;
+    cursor: pointer;
+    font-size: 13px;
+    width: 24px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+    line-height: 1;
+    transition: background 100ms, color 100ms, border-color 100ms;
+}
+.rename-bar-confirm { color: #5a9; border-color: #3a6a4a; }
+.rename-bar-confirm:hover:not(:disabled) { background: rgba(60,140,80,0.2); color: #7bd; border-color: #5a9; }
+.rename-bar-confirm:disabled { opacity: 0.3; cursor: default; }
+.rename-bar-cancel { color: #a55; border-color: #6a3a3a; }
+.rename-bar-cancel:hover { background: rgba(140,60,60,0.2); color: #e77; border-color: #a55; }
+
+/* ── Tab context menu ────────────────────────────────────────────────────── */
+
+.tab-context-menu {
+    position: fixed;
+    z-index: 300;
+    background: #222;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    padding: 4px 0;
+    min-width: 190px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+}
+
+.tab-context-menu-item {
+    padding: 6px 14px;
+    font-size: 13px;
+    color: #ccc;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+.tab-context-menu-item:hover { background: #2e2e2e; color: white; }
+.tab-context-menu-item--disabled {
+    color: #555;
+    cursor: default;
+    font-style: italic;
+}
+.tab-context-menu-item--disabled:hover { background: none; color: #555; }
+
+.tab-context-menu-shortcut {
+    font-size: 11px;
+    color: #555;
+    font-family: 'Consolas', monospace;
+}
+
+.tab-context-menu-separator {
+    height: 1px;
+    background: #3a3a3a;
+    margin: 4px 0;
+}
+
+.tab-context-menu-item--danger {
+    color: #e06060;
+}
+.tab-context-menu-item--danger:hover { background: rgba(160, 50, 50, 0.25); color: #f08080; }
+
+.tab-context-menu-tooltip {
+    position: absolute;
+    left: calc(100% + 6px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: #111;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: #ccc;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 301;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}

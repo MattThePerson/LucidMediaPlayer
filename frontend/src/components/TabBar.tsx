@@ -25,6 +25,7 @@ interface Props {
     onOpenManageProfiles: () => void;
     onMenuOpen?: () => void;
     onTearOff?: (tabId: string) => void;
+    onTabContextMenu?: (tabId: string, x: number, y: number) => void;
 }
 
 export default function TabBar({
@@ -37,6 +38,7 @@ export default function TabBar({
     version, isWorking,
     profileInfo, profiles, onOpenProfile, onOpenManageProfiles, onMenuOpen,
     onTearOff,
+    onTabContextMenu,
 }: Props) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -212,6 +214,7 @@ export default function TabBar({
                         draggable
                         onClick={() => onSwitch(tab.id)}
                         onMouseDown={e => { if (e.button === 1) { e.preventDefault(); onClose(tab.id); } }}
+                        onContextMenu={e => { e.preventDefault(); onTabContextMenu?.(tab.id, e.clientX, e.clientY); }}
                         onDragStart={e => handleDragStart(e, tab.id)}
                         onDragEnd={handleDragEnd}
                         title={tab.title}

@@ -64,9 +64,13 @@ export function RegenerateSeekThumbnails(arg1:string):Promise<void>;
 
 export function RenameProfile(arg1:string,arg2:string):Promise<void>;
 
+export function RenameVideoFile(arg1:string,arg2:string):Promise<string>;
+
 export function ReorderProfiles(arg1:Array<string>):Promise<void>;
 
 export function ResizeVideo():Promise<void>;
+
+export function RevealInExplorer(arg1:string):Promise<void>;
 
 export function SavePreferences(arg1:main.Preferences):Promise<void>;
 

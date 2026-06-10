@@ -122,12 +122,20 @@ export function RenameProfile(arg1, arg2) {
   return window['go']['main']['App']['RenameProfile'](arg1, arg2);
 }
 
+export function RenameVideoFile(arg1, arg2) {
+  return window['go']['main']['App']['RenameVideoFile'](arg1, arg2);
+}
+
 export function ReorderProfiles(arg1) {
   return window['go']['main']['App']['ReorderProfiles'](arg1);
 }
 
 export function ResizeVideo() {
   return window['go']['main']['App']['ResizeVideo']();
+}
+
+export function RevealInExplorer(arg1) {
+  return window['go']['main']['App']['RevealInExplorer'](arg1);
 }
 
 export function SavePreferences(arg1) {

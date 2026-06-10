@@ -185,6 +185,26 @@ func ClearRecents() error {
 	return err
 }
 
+// UpdateFilepathByID atomically renames a filepath in the DB. If another row
+// already uses newPath, it is deleted first so the unique constraint is satisfied.
+func UpdateFilepathByID(id int64, newPath string) error {
+	if gDB == nil {
+		return fmt.Errorf("db not initialised")
+	}
+	tx, err := gDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`DELETE FROM videos WHERE filepath=? AND id!=?`, newPath, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE videos SET filepath=? WHERE id=?`, newPath, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // HashVideoFile reads 3×64 KB chunks (start, middle, end) and returns their
 // SHA-256 as a hex string. Survives renames; typically sub-millisecond.
 func HashVideoFile(path string) (string, error) {

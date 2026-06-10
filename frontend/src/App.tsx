@@ -11,11 +11,15 @@ import {
     FrameStep, SetPlaybackSpeed, SetVideoFilter,
     GetProfileInfo, GetProfiles, CreateProfile, RenameProfile, SetProfileColor,
     DeleteProfile, ReorderProfiles, OpenProfile, TearOffTab,
+    RenameVideoFile,
+    RevealInExplorer,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
 import TabBar from './components/TabBar';
 import RecentFilesOverlay from './components/RecentFilesOverlay';
+import RenameBar from './components/RenameBar';
+import TabContextMenu from './components/TabContextMenu';
 import HomeScreen from './components/HomeScreen';
 import PassionPlayerWrapper from './components/PassionPlayerWrapper';
 import DebugPage from './components/DebugPage';
@@ -29,6 +33,7 @@ import type { Tab, PlaylistState, PlaylistsMap, TabsStateMap, SeekThumbs, Notifi
 import type { main, db } from '../wailsjs/go/models';
 
 const PAGE_TITLES: Record<PageTabType, string> = { debug: 'Debug', changelog: 'Changelog', preferences: 'Settings', manageprofiles: 'Profiles' };
+const extname = (p: string) => { const i = p.lastIndexOf('.'); return i >= 0 ? p.slice(i) : ''; };
 
 function App() {
     const [tabs, setTabs] = useState<Tab[]>([]);
@@ -53,6 +58,9 @@ function App() {
     const [viewportH, setViewportH] = useState(window.innerHeight);
     const [preferences, setPreferences] = useState<main.Preferences>({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false, oneVideoAtATime: false } as main.Preferences);
     const [playlists, setPlaylists] = useState<PlaylistsMap>({});
+    const [renameTabId, setRenameTabId] = useState<string | null>(null);
+    const [renameHistory, setRenameHistory] = useState<Map<string, string[]>>(new Map());
+    const [tabContextMenu, setTabContextMenu] = useState<{ tabId: string; x: number; y: number } | null>(null);
 
     const closedTabsRef = useRef<ClosedTabEntry[]>([]);
     const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,6 +71,8 @@ function App() {
     const autoPausedTabIdRef = useRef<string | null>(null);
     const playlistsRef = useRef<PlaylistsMap>(playlists);
     playlistsRef.current = playlists;
+    const renameTabIdRef = useRef<string | null>(null);
+    renameTabIdRef.current = renameTabId;
     const activeTabRef = useRef<Tab | null>(null);
     const activeTabIdRef = useRef<string | null>(null);
     const preferencesRef = useRef<main.Preferences>(preferences);
@@ -454,6 +464,8 @@ function App() {
     }, []);
 
     const handleSwitchTab = useCallback(async (tabId: string) => {
+        if (renameTabIdRef.current !== null) setRenameTabId(null);
+        setTabContextMenu(null);
         if (tabId === activeTabId) return;
 
         if (preferencesRef.current?.oneVideoAtATime) {
@@ -485,6 +497,8 @@ function App() {
     }, [activeTabId, tabs, playlists]);
 
     const handleCloseTab = useCallback(async (tabId: string) => {
+        if (renameTabIdRef.current === tabId) setRenameTabId(null);
+        setRenameHistory(prev => { const n = new Map(prev); n.delete(tabId); return n; });
         const idx = tabs.findIndex(t => t.id === tabId);
         const tab = tabs.find(t => t.id === tabId);
 
@@ -673,12 +687,103 @@ function App() {
         GetProfiles().then(setProfiles).catch(() => {});
     }, []);
 
+    // ── Rename file ─────────────────────────────────────────────────────────────
+
+    const openRenameBar = useCallback(async (tabId: string) => {
+        setTabContextMenu(null);
+        if (tabId !== activeTabId) await handleSwitchTab(tabId);
+        setRenameTabId(tabId);
+    }, [activeTabId, handleSwitchTab]);
+
+    const handleRenameConfirm = useCallback(async (newStem: string) => {
+        const tabId = renameTabId;
+        if (!tabId) return;
+        const tab = tabs.find(t => t.id === tabId);
+        if (!tab?.path) return;
+        const oldPath = tab.path;
+        setRenameTabId(null);
+        try {
+            const newPath = await RenameVideoFile(tabId, newStem);
+            setTabs(prev => prev.map(t =>
+                t.path === oldPath ? { ...t, title: newStem + extname(oldPath), path: newPath } : t
+            ));
+            setRenameHistory(prev => {
+                const next = new Map(prev);
+                next.set(tabId, [...(next.get(tabId) ?? []), oldPath]);
+                return next;
+            });
+            setPlaylists(prev => {
+                const next = { ...prev };
+                for (const [pid, ps] of Object.entries(next)) {
+                    if (ps.videoTabId === tabId && ps.currentIndex >= 0 && ps.items[ps.currentIndex] === oldPath) {
+                        const newItems = [...ps.items];
+                        newItems[ps.currentIndex] = newPath;
+                        next[pid] = { ...ps, items: newItems };
+                    }
+                }
+                return next;
+            });
+            if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+            setNotification({ type: 'done', message: `Renamed to ${newStem}${extname(oldPath)}` });
+            notifTimerRef.current = setTimeout(() => setNotification(null), 2500);
+        } catch (err) {
+            if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+            setNotification({ type: 'prompt', message: `Rename failed: ${String(err)}` });
+            notifTimerRef.current = setTimeout(() => setNotification(null), 3500);
+        }
+    }, [renameTabId, tabs]);
+
+    const handleRenameUndo = useCallback(async (tabId: string) => {
+        const stack = renameHistory.get(tabId);
+        if (!stack?.length) return;
+        const prevPath = stack[stack.length - 1]!;
+        const tab = tabs.find(t => t.id === tabId);
+        if (!tab?.path) return;
+        const oldPath = tab.path;
+        const prevStem = prevPath.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, '');
+        setTabContextMenu(null);
+        try {
+            const newPath = await RenameVideoFile(tabId, prevStem);
+            setTabs(prev => prev.map(t =>
+                t.path === oldPath ? { ...t, title: prevPath.split(/[\\/]/).pop()!, path: newPath } : t
+            ));
+            setRenameHistory(prev => {
+                const next = new Map(prev);
+                const newStack = [...(next.get(tabId) ?? [])];
+                newStack.pop();
+                if (newStack.length === 0) next.delete(tabId);
+                else next.set(tabId, newStack);
+                return next;
+            });
+            setPlaylists(prev => {
+                const next = { ...prev };
+                for (const [pid, ps] of Object.entries(next)) {
+                    if (ps.videoTabId === tabId && ps.currentIndex >= 0 && ps.items[ps.currentIndex] === oldPath) {
+                        const newItems = [...ps.items];
+                        newItems[ps.currentIndex] = newPath;
+                        next[pid] = { ...ps, items: newItems };
+                    }
+                }
+                return next;
+            });
+            if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+            setNotification({ type: 'done', message: `Reverted to ${prevPath.split(/[\\/]/).pop()}` });
+            notifTimerRef.current = setTimeout(() => setNotification(null), 2500);
+        } catch (err) {
+            if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+            setNotification({ type: 'prompt', message: `Undo failed: ${String(err)}` });
+            notifTimerRef.current = setTimeout(() => setNotification(null), 3500);
+        }
+    }, [renameHistory, tabs]);
+
     useEffect(() => {
         if (activeTab?.type === 'manageprofiles') refreshProfiles();
     }, [activeTab?.type, refreshProfiles]);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
+            if (renameTabId !== null) return;
+
             const tag = (document.activeElement as HTMLElement | null)?.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
@@ -689,6 +794,15 @@ function App() {
 
             const isVideo = activeTab?.type === 'video';
             const isPlaylistPlaying = activeTab?.type === 'playlist' && (activeTabId ? playlists[activeTabId]?.videoTabId : null);
+
+            if (e.code === 'F2' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                if (isVideo && activeTabId && activeTab?.path && !isFullscreen) {
+                    e.preventDefault();
+                    openRenameBar(activeTabId);
+                }
+                return;
+            }
+
             if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyK') {
                 e.preventDefault();
                 if (chordTimerRef.current) clearTimeout(chordTimerRef.current);
@@ -826,9 +940,9 @@ function App() {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [activeTabId, activeTab, tabs, isFullscreen, info, playlists, recentOverlayOpen,
-        effectiveVideoTabId, handleCloseTab, handleSwitchTab, handleTogglePlayback,
+        renameTabId, effectiveVideoTabId, handleCloseTab, handleSwitchTab, handleTogglePlayback,
         handleOpenFile, openPageTab, openVideoPath, openNewPlaylist, openFolderAsPlaylist,
-        handlePlaylistNext, handlePlaylistPrev, handlePlaylistCloseVideo, setTabs]);
+        handlePlaylistNext, handlePlaylistPrev, handlePlaylistCloseVideo, openRenameBar, setTabs]);
 
     const isPlaylistPlaying = activeTab?.type === 'playlist' && !!(activeTabId ? playlists[activeTabId]?.videoTabId : null);
     const effectiveHeight = isFullscreen ? viewportH : Math.min(viewportH, window.screen.availHeight);
@@ -858,6 +972,7 @@ function App() {
                     onOpenManageProfiles={() => openPageTab('manageprofiles')}
                     onMenuOpen={refreshProfiles}
                     onTearOff={handleTearOff}
+                    onTabContextMenu={(id, x, y) => setTabContextMenu({ tabId: id, x, y })}
                 />
             )}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
@@ -898,7 +1013,7 @@ function App() {
                             controlsOverlayKey="F1"
                             disableKeybinds={!effectiveVideoTabId}
                         />
-                        {activeTab?.type === 'video' && <Notification notification={notification} />}
+                        <Notification notification={notification} />
                         {activeTab?.type === 'video' && <DebugHUD open={debugHUDOpen} onClose={() => setDebugHUDOpen(false)} />}
                         {isPlaylistPlaying && (
                             <button
@@ -949,6 +1064,52 @@ function App() {
                     onClose={() => setRecentOverlayOpen(false)}
                 />
             )}
+            {renameTabId !== null && (() => {
+                const tab = tabs.find(t => t.id === renameTabId);
+                if (!tab?.path) return null;
+                const p = tab.path;
+                const lastSlash = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+                const filename = p.slice(lastSlash + 1);
+                const lastDot = filename.lastIndexOf('.');
+                const stem = lastDot >= 0 ? filename.slice(0, lastDot) : filename;
+                const ext  = lastDot >= 0 ? filename.slice(lastDot) : '';
+                return <>
+                    <div className="rename-backdrop" onMouseDown={() => setRenameTabId(null)} />
+                    <RenameBar stem={stem} ext={ext} onConfirm={handleRenameConfirm} onCancel={() => setRenameTabId(null)} />
+                </>;
+            })()}
+            {tabContextMenu !== null && (() => {
+                const ctxTabId = tabContextMenu.tabId;
+                const tab = tabs.find(t => t.id === ctxTabId);
+                const stack = renameHistory.get(ctxTabId);
+                const undoName = stack?.length ? stack[stack.length - 1]!.split(/[\\/]/).pop()! : null;
+                let ctxVideoTabId: string | null = null;
+                if (tab?.type === 'video') ctxVideoTabId = ctxTabId;
+                else if (tab?.type === 'playlist') ctxVideoTabId = playlists[ctxTabId]?.videoTabId ?? null;
+                const ctxIsPlaying = ctxVideoTabId !== null ? (tabsState[ctxVideoTabId] ?? false) : null;
+                return <TabContextMenu
+                    x={tabContextMenu.x} y={tabContextMenu.y}
+                    isPlaying={ctxIsPlaying}
+                    onPlayPause={() => {
+                        if (ctxVideoTabId) {
+                            TogglePlayback(ctxVideoTabId).catch(console.error);
+                            setTimeout(() => GetAllTabsState().then(setTabsState).catch(() => {}), 50);
+                        }
+                        setTabContextMenu(null);
+                    }}
+                    canRename={tab?.type === 'video' && !!tab.path}
+                    undoName={undoName ?? null}
+                    onRename={() => openRenameBar(ctxTabId)}
+                    onUndo={() => handleRenameUndo(ctxTabId)}
+                    filePath={tab?.type === 'video' ? (tab.path ?? null) : null}
+                    onRevealInExplorer={() => {
+                        if (tab?.type === 'video' && tab.path) RevealInExplorer(tab.path).catch(console.error);
+                        setTabContextMenu(null);
+                    }}
+                    onCloseTab={() => { setTabContextMenu(null); handleCloseTab(ctxTabId); }}
+                    onClose={() => setTabContextMenu(null)}
+                />;
+            })()}
         </div>
     );
 }
