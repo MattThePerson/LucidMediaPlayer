@@ -84,6 +84,8 @@ export function StartSeekThumbnailGeneration(arg1:string):Promise<void>;
 
 export function SwitchTab(arg1:string):Promise<void>;
 
+export function TearOffTab(arg1:string):Promise<void>;
+
 export function ToggleFullscreen():Promise<void>;
 
 export function TogglePlayback(arg1:string):Promise<void>;

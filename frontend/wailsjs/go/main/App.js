@@ -162,6 +162,10 @@ export function SwitchTab(arg1) {
   return window['go']['main']['App']['SwitchTab'](arg1);
 }
 
+export function TearOffTab(arg1) {
+  return window['go']['main']['App']['TearOffTab'](arg1);
+}
+
 export function ToggleFullscreen() {
   return window['go']['main']['App']['ToggleFullscreen']();
 }

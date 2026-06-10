@@ -10,6 +10,7 @@ export default function TabBar({
     onOpenRecentOverlay,
     version, isWorking,
     profileInfo, profiles, onOpenProfile, onOpenManageProfiles, onMenuOpen,
+    onTearOff,
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [draggingId, setDraggingId] = useState(null);
@@ -79,12 +80,17 @@ export default function TabBar({
         requestAnimationFrame(() => document.body.removeChild(ghost));
     };
 
-    const handleDragEnd = () => {
+    const handleDragEnd = (e) => {
         const id = draggedIdRef.current;
+        const tab = tabs.find(t => t.id === id);
         draggedIdRef.current = null;
         lastOverRef.current = null;
         setDraggingId(null);
-        // Switch to the tab that was dragged
+
+        if (id && tab?.type === 'video' && e.clientY > 80) {
+            onTearOff?.(id);
+            return;
+        }
         if (id && id !== activeTabId) {
             onSwitch(id);
         }

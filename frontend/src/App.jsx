@@ -10,7 +10,7 @@ import {
     GetSubtitleState, SetSubtitleTrack, AddSubtitleFile, OpenSubtitleFilePicker,
     FrameStep, SetPlaybackSpeed, SetVideoFilter,
     GetProfileInfo, GetProfiles, CreateProfile, RenameProfile, SetProfileColor,
-    DeleteProfile, ReorderProfiles, OpenProfile,
+    DeleteProfile, ReorderProfiles, OpenProfile, TearOffTab,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
@@ -524,6 +524,21 @@ function App() {
         }
     }, [tabs, activeTabId, playlists]);
 
+    const handleTearOff = useCallback(async (tabId) => {
+        await TearOffTab(tabId).catch(console.error);
+        const idx = tabs.findIndex(t => t.id === tabId);
+        const newTabs = tabs.filter(t => t.id !== tabId);
+        setTabs(newTabs);
+        if (tabId === activeTabId) {
+            const next = newTabs[Math.min(idx, newTabs.length - 1)] ?? null;
+            let nextGoTabId = '';
+            if (next?.type === 'video') nextGoTabId = next.id;
+            await SwitchTab(nextGoTabId).catch(console.error);
+            setActiveTabId(next?.id ?? null);
+            if (!nextGoTabId) setInfo({ time_pos: 0, duration: 0, paused: true });
+        }
+    }, [tabs, activeTabId]);
+
     const openPageTab = useCallback((type) => {
         const existing = tabs.find(t => t.type === type);
         if (existing) {
@@ -849,6 +864,7 @@ function App() {
                     onOpenProfile={handleOpenProfile}
                     onOpenManageProfiles={() => openPageTab('manageprofiles')}
                     onMenuOpen={refreshProfiles}
+                    onTearOff={handleTearOff}
                 />
             )}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>

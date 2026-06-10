@@ -773,6 +773,21 @@ func (a *App) CloseTab(tabID string) error {
 	return nil
 }
 
+// TearOffTab saves position, closes the tab, and spawns a new instance with the same file.
+func (a *App) TearOffTab(tabID string) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return nil
+	}
+	filePath := tab.filePath
+	if err := a.CloseTab(tabID); err != nil {
+		return err
+	}
+	return launchVisible(filePath, "-profile", *config.Profile, "-tearoff")
+}
+
 func (a *App) TogglePlayback(tabID string) error {
 	a.tabsMu.RLock()
 	tab, ok := a.tabs[tabID]

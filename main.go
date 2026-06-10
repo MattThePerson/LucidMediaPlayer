@@ -21,6 +21,7 @@ var assets embed.FS
 func main() {
 
     // Profile
+    tearoff := flag.Bool("tearoff", false, "")
     config.Profile = flag.String("profile", "default", "profile to use")
     flag.Parse()
 
@@ -52,7 +53,8 @@ func main() {
 
 	// If the user has opted into single-instance mode and there's already an
 	// instance running, hand the file off to it and exit immediately.
-	if startupFile != "" {
+	// Skip this when launched as a tear-off so the new window always opens.
+	if startupFile != "" && !*tearoff {
 		prefs := loadPreferences()
 		if prefs.OpenInExistingInstance && trySendToExistingInstance(startupFile) {
 			return

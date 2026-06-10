@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.2.4] — 2026-06-10
+- Feat: drag a video tab downward (>80px) to tear it off into a new window; position is restored automatically
+
 ## [0.2.3] — 2026-06-10
 - Fix: profile color dot no longer pushes "Profile:" text right in dropdown (wrapped in flex label)
 - Fix: delete profile now shows a popup modal instead of inline button swap
