@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.7] — 2026-06-10
+- Fix: WebView2 keyboard focus now routed through Win32 message thread via PostMessage (SetFocus was silently failing from Go goroutine)
+- Fix: home screen text is no longer selectable
+- Feat: Debug HUD overlay (Shift+F3) shows Win32 focus state
+
+## [0.2.6] — 2026-06-10
+- Fix: player buttons (play, fullscreen, subtitle) no longer retain focus after click — Space/Enter no longer re-trigger them
+- Fix: double-clicking video area for fullscreen no longer leaves fullscreen button visually selected
+- Fix: keyboard shortcuts (Space, F, etc.) now work immediately after opening the app via File Explorer, without requiring a click inside the WebView
+
 ## [0.2.5] — 2026-06-10
 - Refactor: migrated frontend from JS/JSX to TypeScript (all 15 source files); PassionPlayer.js kept with .d.ts sidecar; tsconfig fixed for Vite/bundler target
 

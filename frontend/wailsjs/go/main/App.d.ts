@@ -22,6 +22,8 @@ export function GetAppDataDir():Promise<string>;
 
 export function GetChangelog():Promise<string>;
 
+export function GetDebugHUDInfo():Promise<Record<string, string>>;
+
 export function GetMediaFilesInFolder(arg1:string):Promise<Array<string>>;
 
 export function GetPlaybackInfo(arg1:string):Promise<main.PlaybackInfo>;

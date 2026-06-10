@@ -38,6 +38,10 @@ export function GetChangelog() {
   return window['go']['main']['App']['GetChangelog']();
 }
 
+export function GetDebugHUDInfo() {
+  return window['go']['main']['App']['GetDebugHUDInfo']();
+}
+
 export function GetMediaFilesInFolder(arg1) {
   return window['go']['main']['App']['GetMediaFilesInFolder'](arg1);
 }

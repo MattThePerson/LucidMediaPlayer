@@ -275,9 +275,24 @@ func (a *App) onDomReady(ctx context.Context) {
 	a.parentHWND = hwnd
 	a.emitDebug("startup", fmt.Sprintf("parentHWND=%d — ready", hwnd))
 
+	child, _, _ := getWindowProc.Call(hwnd, gwChild)
+	if child != 0 {
+		gWebviewHWND = child
+		// PostMessage queues the focus request on the Win32 message thread.
+		// Calling SetFocus directly from this goroutine would fail silently
+		// because SetFocus requires the calling thread to own the window's message queue.
+		postMessageProc.Call(hwnd, wmFocusWebview, 0, 0)
+	}
+
 	if a.startupFile != "" {
 		runtime.EventsEmit(ctx, "open-file", a.startupFile)
 		a.startupFile = ""
+	}
+}
+
+func (a *App) GetDebugHUDInfo() map[string]string {
+	return map[string]string{
+		"win32": getWin32DebugString(a.parentHWND),
 	}
 }
 

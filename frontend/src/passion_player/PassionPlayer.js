@@ -428,6 +428,12 @@ export class PassionPlayer {
         this._addSubtitleEventListeners();
         this._addScrollEventListeners();
         this._initControlsAutoHide();
+
+        this.shadow.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON' || e.target.closest?.('button')) {
+                e.preventDefault();
+            }
+        }, true);
     }
 
     _addPlayBtnEventListeners() {
@@ -1463,6 +1469,11 @@ export class PassionPlayer {
     justify-content: center;
     position: relative;
     font-family: Nunito, sans-serif;
+    user-select: none;
+}
+
+button:focus {
+    outline: none;
 }
 
 video {

@@ -28,8 +28,11 @@ var (
 	monitorFromWinProc  = modUser32.NewProc("MonitorFromWindow")
 	getMonitorInfoProc  = modUser32.NewProc("GetMonitorInfoW")
 	setWindowLongPtrProc = modUser32.NewProc("SetWindowLongPtrW")
-	callWindowProcProc  = modUser32.NewProc("CallWindowProcW")
-	setForegroundProc   = modUser32.NewProc("SetForegroundWindow")
+	callWindowProcProc   = modUser32.NewProc("CallWindowProcW")
+	setForegroundProc       = modUser32.NewProc("SetForegroundWindow")
+	setFocusProc            = modUser32.NewProc("SetFocus")
+	postMessageProc         = modUser32.NewProc("PostMessageW")
+	getForegroundWindowProc = modUser32.NewProc("GetForegroundWindow")
 )
 
 const (
@@ -50,9 +53,11 @@ const (
 	swShowMaximized    = uintptr(3)         // SW_SHOWMAXIMIZED
 	monitorDefaultToNearest = uintptr(2)
 
-	gwlpWndProc  = uintptr(0xFFFFFFFC) // GWLP_WNDPROC = -4
-	wmSysCommand = uintptr(0x0112)
-	scKeyMenu    = uintptr(0xF100)
+	gwlpWndProc   = uintptr(0xFFFFFFFC) // GWLP_WNDPROC = -4
+	wmSysCommand  = uintptr(0x0112)
+	scKeyMenu     = uintptr(0xF100)
+	wmActivate    = uintptr(0x0006)
+	wmFocusWebview = uintptr(0x8001) // WM_APP+1: route SetFocus through message thread
 )
 
 type monitorInfo struct {
@@ -65,14 +70,36 @@ type monitorInfo struct {
 var (
 	origWndProc     uintptr
 	wndProcCallback uintptr
+	gWebviewHWND    uintptr
+	gSetFocusCount  int
 )
 
 func wndProcSubclass(hwnd, msg, wParam, lParam uintptr) uintptr {
 	if msg == wmSysCommand && (wParam&0xFFF0) == scKeyMenu {
 		return 0
 	}
+	// Route SetFocus to WebView2 through the message thread (called from Go goroutines via PostMessage).
+	if msg == wmFocusWebview && gWebviewHWND != 0 {
+		setFocusProc.Call(gWebviewHWND)
+		gSetFocusCount++
+		return 0
+	}
 	ret, _, _ := callWindowProcProc.Call(origWndProc, hwnd, msg, wParam, lParam)
+	// On window activation, also forward focus to WebView2 (covers alt-tab, bringToFront, etc.).
+	if msg == wmActivate && wParam&0xFFFF != 0 && gWebviewHWND != 0 {
+		setFocusProc.Call(gWebviewHWND)
+		gSetFocusCount++
+	}
 	return ret
+}
+
+// getWin32DebugString returns a human-readable string of Win32 focus state for the debug HUD.
+func getWin32DebugString(parentHWND uintptr) string {
+	fg, _, _ := getForegroundWindowProc.Call()
+	return fmt.Sprintf(
+		"parentHWND:    0x%X\nwebviewHWND:   0x%X\nforegroundWnd: 0x%X\nsetFocusCount: %d",
+		parentHWND, gWebviewHWND, fg, gSetFocusCount,
+	)
 }
 
 // ipcPath returns the Windows named pipe path for a tab's mpv IPC socket.

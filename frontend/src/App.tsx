@@ -24,6 +24,7 @@ import Notification from './components/Notification';
 import PreferencesPage from './components/PreferencesPage';
 import PlaylistPage from './components/PlaylistPage';
 import ManageProfilesPage from './components/ManageProfilesPage';
+import DebugHUD from './components/DebugHUD';
 import type { Tab, PlaylistState, PlaylistsMap, TabsStateMap, SeekThumbs, NotificationEntry, ClosedTabEntry, PageTabType } from './types';
 import type { main, db } from '../wailsjs/go/models';
 
@@ -48,6 +49,7 @@ function App() {
     const [activeSid, setActiveSid] = useState(0);
     const [recentOverlayOpen, setRecentOverlayOpen] = useState(false);
     const [videoUIVisible, setVideoUIVisible] = useState(false);
+    const [debugHUDOpen, setDebugHUDOpen] = useState(false);
     const [viewportH, setViewportH] = useState(window.innerHeight);
     const [preferences, setPreferences] = useState<main.Preferences>({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false, oneVideoAtATime: false } as main.Preferences);
     const [playlists, setPlaylists] = useState<PlaylistsMap>({});
@@ -324,6 +326,11 @@ function App() {
         window.addEventListener('dragover', onDragOver);
         window.addEventListener('dragleave', onDragLeave);
         window.addEventListener('drop', onDrop);
+        const blurButtons = () => {
+            const el = document.activeElement as HTMLElement | null;
+            if (el?.tagName === 'BUTTON') el.blur();
+        };
+        document.addEventListener('mouseup', blurButtons);
         return () => {
             offDebugLog?.();
             offFullscreen?.();
@@ -336,6 +343,7 @@ function App() {
             window.removeEventListener('dragover', onDragOver);
             window.removeEventListener('dragleave', onDragLeave);
             window.removeEventListener('drop', onDrop);
+            document.removeEventListener('mouseup', blurButtons);
         };
     }, [openVideoPath]);
 
@@ -698,7 +706,8 @@ function App() {
                     handlePlaylistCloseVideo();
                 }
             }
-            if (e.code === 'F3') { e.preventDefault(); openPageTab('debug'); }
+            if (e.code === 'F3' && !e.shiftKey) { e.preventDefault(); openPageTab('debug'); }
+            if (e.code === 'F3' && e.shiftKey) { e.preventDefault(); setDebugHUDOpen(v => !v); }
             if (e.code === 'F5' && isVideo && activeTabId) {
                 e.preventDefault();
                 if (e.shiftKey) {
@@ -890,6 +899,7 @@ function App() {
                             disableKeybinds={!effectiveVideoTabId}
                         />
                         {activeTab?.type === 'video' && <Notification notification={notification} />}
+                        {activeTab?.type === 'video' && <DebugHUD open={debugHUDOpen} onClose={() => setDebugHUDOpen(false)} />}
                         {isPlaylistPlaying && (
                             <button
                                 className={`playlist-close-video-btn${videoUIVisible ? ' visible' : ''}`}

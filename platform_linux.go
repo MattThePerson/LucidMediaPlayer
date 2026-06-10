@@ -80,3 +80,6 @@ func platformToggleFullscreen(a *App) {
 
 // platformResizeVideo is a no-op on Linux (mpv manages its own window).
 func platformResizeVideo(_ *App) {}
+
+// getWin32DebugString is a no-op on Linux.
+func getWin32DebugString(_ uintptr) string { return "(not available on Linux)" }

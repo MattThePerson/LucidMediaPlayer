@@ -294,6 +294,8 @@ body {
     height: 100%;
     gap: 8px;
     position: relative;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .home-icon {
