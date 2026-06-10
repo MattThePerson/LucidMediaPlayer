@@ -662,6 +662,128 @@ func (a *App) GetSeekThumbnailData(tabID string) thumbs.SeekThumbnailData {
 	}
 }
 
+// FileEntry is one item in a directory listing returned to the frontend.
+type FileEntry struct {
+	Name          string  `json:"name"`
+	Path          string  `json:"path"`
+	IsDir         bool    `json:"isDir"`
+	Size          int64   `json:"size"`
+	DateModified  string  `json:"dateModified"`
+	DateCreated   string  `json:"dateCreated"`
+	Extension     string  `json:"extension"`
+	IsMedia       bool    `json:"isMedia"`
+	HasSeekThumbs bool    `json:"hasSeekThumbs"`
+	Duration      float64 `json:"duration"`
+}
+
+var fileThumbnailCache sync.Map // map[string]string: path → "data:image/jpeg;base64,..."
+
+// GetFolderContents returns all subdirectories and media files in folderPath with metadata.
+func (a *App) GetFolderContents(folderPath string) ([]FileEntry, error) {
+	entries, err := os.ReadDir(folderPath)
+	if err != nil {
+		return nil, err
+	}
+	appDataDir, _ := storage.AppDataDir()
+	var result []FileEntry
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(e.Name()))
+		isMedia := !e.IsDir() && mediaExtensions[ext]
+		if !e.IsDir() && !isMedia {
+			continue
+		}
+		modTime := info.ModTime().UTC().Format(time.RFC3339)
+		fe := FileEntry{
+			Name:         e.Name(),
+			Path:         filepath.Join(folderPath, e.Name()),
+			IsDir:        e.IsDir(),
+			Size:         info.Size(),
+			DateModified: modTime,
+			DateCreated:  getFileCreatedTime(info, modTime),
+			Extension:    ext,
+			IsMedia:      isMedia,
+		}
+		if isMedia && appDataDir != "" {
+			hash, duration, found := db.GetVideoMetaByPath(fe.Path)
+			if found {
+				fe.Duration = duration
+				if hash != "" {
+					spritesheet := filepath.Join(appDataDir, "media", hash, "spritesheet.jpg")
+					if _, serr := os.Stat(spritesheet); serr == nil {
+						fe.HasSeekThumbs = true
+					}
+				}
+			}
+		}
+		result = append(result, fe)
+	}
+	if result == nil {
+		result = []FileEntry{}
+	}
+	return result, nil
+}
+
+// GetFileThumbnail extracts a single JPEG frame from filePath via ffmpeg and returns
+// it as a base64 data URI. Results are cached in memory for the process lifetime.
+func (a *App) GetFileThumbnail(filePath string) (string, error) {
+	if v, ok := fileThumbnailCache.Load(filePath); ok {
+		return v.(string), nil
+	}
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return "", fmt.Errorf("ffmpeg not found")
+	}
+	data, err := exec.Command(ffmpegPath,
+		"-ss", "5", "-i", filePath,
+		"-frames:v", "1", "-vf", "scale=320:-2",
+		"-f", "mjpeg", "-q:v", "5", "pipe:1",
+	).Output()
+	if err != nil || len(data) == 0 {
+		// Fallback: extract first frame without seeking (for very short files)
+		data, err = exec.Command(ffmpegPath,
+			"-i", filePath,
+			"-frames:v", "1", "-vf", "scale=320:-2",
+			"-f", "mjpeg", "-q:v", "5", "pipe:1",
+		).Output()
+		if err != nil || len(data) == 0 {
+			return "", fmt.Errorf("thumbnail extraction failed")
+		}
+	}
+	result := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(data)
+	fileThumbnailCache.Store(filePath, result)
+	return result, nil
+}
+
+// GetSeekThumbnailDataByPath returns seek thumbnail data for a file path, looking up
+// its hash from the database. Use this when no tab is open for the file.
+func (a *App) GetSeekThumbnailDataByPath(filePath string) thumbs.SeekThumbnailData {
+	hash, _, found := db.GetVideoMetaByPath(filePath)
+	if !found || hash == "" {
+		return thumbs.SeekThumbnailData{}
+	}
+	dir, err := storage.MediaDir(hash)
+	if err != nil {
+		return thumbs.SeekThumbnailData{}
+	}
+	vttBytes, err := os.ReadFile(filepath.Join(dir, "spritesheet.vtt"))
+	if err != nil {
+		return thumbs.SeekThumbnailData{}
+	}
+	ssBytes, err := os.ReadFile(filepath.Join(dir, "spritesheet.jpg"))
+	if err != nil {
+		return thumbs.SeekThumbnailData{}
+	}
+	return thumbs.SeekThumbnailData{
+		VTT:               string(vttBytes),
+		SpritesheetBase64: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(ssBytes),
+		Ready:             true,
+	}
+}
+
 // GetChangelog returns the embedded CHANGELOG.md content.
 func (a *App) GetChangelog() string {
 	return getChangelog()

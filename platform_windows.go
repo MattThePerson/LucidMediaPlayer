@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"syscall"
 	"time"
@@ -287,6 +288,14 @@ func platformRevealFile(a *App, path string) {
 	if err := cmd.Start(); err != nil {
 		a.emitDebug("reveal", fmt.Sprintf("error: %v", err))
 	}
+}
+
+// getFileCreatedTime returns the Windows creation time for a file, falling back to modTime.
+func getFileCreatedTime(info os.FileInfo, fallback string) string {
+	if w, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
+		return time.Unix(0, w.CreationTime.Nanoseconds()).UTC().Format(time.RFC3339)
+	}
+	return fallback
 }
 
 // platformResizeVideo repositions the active mpv window after a resize event.

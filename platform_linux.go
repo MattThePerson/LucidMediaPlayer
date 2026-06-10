@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	goruntime "runtime"
 	"path/filepath"
@@ -105,3 +106,6 @@ func platformResizeVideo(_ *App) {}
 
 // getWin32DebugString is a no-op on Linux.
 func getWin32DebugString(_ uintptr) string { return "(not available on Linux)" }
+
+// getFileCreatedTime returns the fallback on Linux (no creation-time syscall).
+func getFileCreatedTime(_ os.FileInfo, fallback string) string { return fallback }

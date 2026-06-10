@@ -185,6 +185,28 @@ func ClearRecents() error {
 	return err
 }
 
+// GetVideoMetaByPath looks up hash and duration by filepath.
+func GetVideoMetaByPath(path string) (hash string, duration float64, found bool) {
+	if gDB == nil {
+		return "", 0, false
+	}
+	var h sql.NullString
+	var d sql.NullFloat64
+	err := gDB.QueryRow(
+		`SELECT hash, duration FROM videos WHERE filepath=?`, path,
+	).Scan(&h, &d)
+	if err != nil {
+		return "", 0, false
+	}
+	if h.Valid {
+		hash = h.String
+	}
+	if d.Valid {
+		duration = d.Float64
+	}
+	return hash, duration, true
+}
+
 // UpdateFilepathByID atomically renames a filepath in the DB. If another row
 // already uses newPath, it is deleted first so the unique constraint is satisfied.
 func UpdateFilepathByID(id int64, newPath string) error {

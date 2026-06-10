@@ -42,6 +42,14 @@ export function GetDebugHUDInfo() {
   return window['go']['main']['App']['GetDebugHUDInfo']();
 }
 
+export function GetFileThumbnail(arg1) {
+  return window['go']['main']['App']['GetFileThumbnail'](arg1);
+}
+
+export function GetFolderContents(arg1) {
+  return window['go']['main']['App']['GetFolderContents'](arg1);
+}
+
 export function GetMediaFilesInFolder(arg1) {
   return window['go']['main']['App']['GetMediaFilesInFolder'](arg1);
 }
@@ -72,6 +80,10 @@ export function GetRecentFiles() {
 
 export function GetSeekThumbnailData(arg1) {
   return window['go']['main']['App']['GetSeekThumbnailData'](arg1);
+}
+
+export function GetSeekThumbnailDataByPath(arg1) {
+  return window['go']['main']['App']['GetSeekThumbnailDataByPath'](arg1);
 }
 
 export function GetSubtitleState(arg1) {

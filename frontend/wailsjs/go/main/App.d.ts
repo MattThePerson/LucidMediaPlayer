@@ -24,6 +24,10 @@ export function GetChangelog():Promise<string>;
 
 export function GetDebugHUDInfo():Promise<Record<string, string>>;
 
+export function GetFileThumbnail(arg1:string):Promise<string>;
+
+export function GetFolderContents(arg1:string):Promise<Array<main.FileEntry>>;
+
 export function GetMediaFilesInFolder(arg1:string):Promise<Array<string>>;
 
 export function GetPlaybackInfo(arg1:string):Promise<main.PlaybackInfo>;
@@ -39,6 +43,8 @@ export function GetProfiles():Promise<Array<main.ProfileEntry>>;
 export function GetRecentFiles():Promise<Array<db.RecentEntry>>;
 
 export function GetSeekThumbnailData(arg1:string):Promise<thumbs.SeekThumbnailData>;
+
+export function GetSeekThumbnailDataByPath(arg1:string):Promise<thumbs.SeekThumbnailData>;
 
 export function GetSubtitleState(arg1:string):Promise<main.SubtitleState>;
 

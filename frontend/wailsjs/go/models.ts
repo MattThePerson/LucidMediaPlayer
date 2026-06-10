@@ -21,6 +21,36 @@ export namespace db {
 
 export namespace main {
 	
+	export class FileEntry {
+	    name: string;
+	    path: string;
+	    isDir: boolean;
+	    size: number;
+	    dateModified: string;
+	    dateCreated: string;
+	    extension: string;
+	    isMedia: boolean;
+	    hasSeekThumbs: boolean;
+	    duration: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new FileEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.isDir = source["isDir"];
+	        this.size = source["size"];
+	        this.dateModified = source["dateModified"];
+	        this.dateCreated = source["dateCreated"];
+	        this.extension = source["extension"];
+	        this.isMedia = source["isMedia"];
+	        this.hasSeekThumbs = source["hasSeekThumbs"];
+	        this.duration = source["duration"];
+	    }
+	}
 	export class PlaybackInfo {
 	    time_pos: number;
 	    duration: number;

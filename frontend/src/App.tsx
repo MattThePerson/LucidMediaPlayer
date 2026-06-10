@@ -27,9 +27,10 @@ import ChangelogPage from './components/ChangelogPage';
 import Notification from './components/Notification';
 import PreferencesPage from './components/PreferencesPage';
 import PlaylistPage from './components/PlaylistPage';
+import FileExplorerPage from './components/FileExplorerPage';
 import ManageProfilesPage from './components/ManageProfilesPage';
 import DebugHUD from './components/DebugHUD';
-import type { Tab, PlaylistState, PlaylistsMap, TabsStateMap, SeekThumbs, NotificationEntry, ClosedTabEntry, PageTabType } from './types';
+import type { Tab, PlaylistState, PlaylistsMap, FileExplorerState, FileExplorersMap, FileExplorerViewType, FileExplorerSortBy, TabsStateMap, SeekThumbs, NotificationEntry, ClosedTabEntry, PageTabType } from './types';
 import type { main, db } from '../wailsjs/go/models';
 
 const PAGE_TITLES: Record<PageTabType, string> = { debug: 'Debug', changelog: 'Changelog', preferences: 'Settings', manageprofiles: 'Profiles' };
@@ -58,6 +59,7 @@ function App() {
     const [viewportH, setViewportH] = useState(window.innerHeight);
     const [preferences, setPreferences] = useState<main.Preferences>({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false, oneVideoAtATime: false } as main.Preferences);
     const [playlists, setPlaylists] = useState<PlaylistsMap>({});
+    const [fileExplorers, setFileExplorers] = useState<FileExplorersMap>({});
     const [renameTabId, setRenameTabId] = useState<string | null>(null);
     const [renameHistory, setRenameHistory] = useState<Map<string, string[]>>(new Map());
     const [tabContextMenu, setTabContextMenu] = useState<{ tabId: string; x: number; y: number } | null>(null);
@@ -71,6 +73,8 @@ function App() {
     const autoPausedTabIdRef = useRef<string | null>(null);
     const playlistsRef = useRef<PlaylistsMap>(playlists);
     playlistsRef.current = playlists;
+    const fileExplorersRef = useRef<FileExplorersMap>(fileExplorers);
+    fileExplorersRef.current = fileExplorers;
     const renameTabIdRef = useRef<string | null>(null);
     renameTabIdRef.current = renameTabId;
     const activeTabRef = useRef<Tab | null>(null);
@@ -89,6 +93,7 @@ function App() {
     const effectiveVideoTabId: string | null =
         activeTab?.type === 'video' ? activeTabId :
         activeTab?.type === 'playlist' ? (activeTabId ? (playlists[activeTabId]?.videoTabId ?? null) : null) :
+        activeTab?.type === 'fileexplorer' ? (activeTabId ? (fileExplorers[activeTabId]?.videoTabId ?? null) : null) :
         null;
     const effectiveVideoTabIdRef = useRef<string | null>(effectiveVideoTabId);
     effectiveVideoTabIdRef.current = effectiveVideoTabId;
@@ -96,6 +101,9 @@ function App() {
     const effectiveTabsState: TabsStateMap = { ...tabsState };
     for (const [plsTabId, pls] of Object.entries(playlists)) {
         if (pls.videoTabId) effectiveTabsState[plsTabId] = tabsState[pls.videoTabId] ?? false;
+    }
+    for (const [exTabId, ex] of Object.entries(fileExplorers)) {
+        if (ex.videoTabId) effectiveTabsState[exTabId] = tabsState[ex.videoTabId] ?? false;
     }
 
     // ── Playlist mutations ──────────────────────────────────────────────────────
@@ -238,6 +246,157 @@ function App() {
             debugLog('OpenFolderAsPlaylist', 'ERROR: ' + e);
         }
     }, [openNewPlaylist]);
+
+    // ── File explorer tab creation ──────────────────────────────────────────────
+
+    const openFileExplorer = useCallback(async () => {
+        try {
+            const folder = await OpenFolderPicker();
+            if (!folder) return;
+            const id = `fileexplorer-${Date.now()}`;
+            const folderName = folder.split(/[\\/]/).pop() || folder;
+            SwitchTab('').catch(console.error);
+            setFileExplorers(prev => ({
+                ...prev,
+                [id]: {
+                    currentPath: folder,
+                    history: [],
+                    forwardHistory: [],
+                    viewType: 'details',
+                    gridSize: 160,
+                    sortBy: 'name',
+                    sortDir: 'asc',
+                    selectedPath: null,
+                    videoTabId: null,
+                    playingPath: null,
+                },
+            }));
+            setTabs(prev => [...prev, { id, type: 'fileexplorer', title: folderName }]);
+            setActiveTabId(id);
+        } catch (e) {
+            debugLog('OpenFolder', 'ERROR: ' + e);
+        }
+    }, []);
+
+    const handleExplorerNavigate = useCallback((exTabId: string, path: string) => {
+        setFileExplorers(prev => {
+            const ex = prev[exTabId];
+            if (!ex) return prev;
+            return {
+                ...prev,
+                [exTabId]: {
+                    ...ex,
+                    history: [...ex.history, ex.currentPath],
+                    forwardHistory: [],
+                    currentPath: path,
+                    selectedPath: null,
+                },
+            };
+        });
+        setTabs(prev => prev.map(t => t.id === exTabId
+            ? { ...t, title: path.split(/[\\/]/).pop() || path }
+            : t
+        ));
+    }, []);
+
+    const handleExplorerBack = useCallback((exTabId: string) => {
+        setFileExplorers(prev => {
+            const ex = prev[exTabId];
+            if (!ex || ex.history.length === 0) return prev;
+            const prevPath = ex.history[ex.history.length - 1]!;
+            return {
+                ...prev,
+                [exTabId]: {
+                    ...ex,
+                    history: ex.history.slice(0, -1),
+                    forwardHistory: [ex.currentPath, ...ex.forwardHistory],
+                    currentPath: prevPath,
+                    selectedPath: null,
+                },
+            };
+        });
+    }, []);
+
+    const handleExplorerForward = useCallback((exTabId: string) => {
+        setFileExplorers(prev => {
+            const ex = prev[exTabId];
+            if (!ex || ex.forwardHistory.length === 0) return prev;
+            const nextPath = ex.forwardHistory[0]!;
+            return {
+                ...prev,
+                [exTabId]: {
+                    ...ex,
+                    history: [...ex.history, ex.currentPath],
+                    forwardHistory: ex.forwardHistory.slice(1),
+                    currentPath: nextPath,
+                    selectedPath: null,
+                },
+            };
+        });
+    }, []);
+
+    const handleExplorerUp = useCallback((exTabId: string) => {
+        const ex = fileExplorersRef.current[exTabId];
+        if (!ex) return;
+        const sep = ex.currentPath.includes('\\') ? '\\' : '/';
+        const parts = ex.currentPath.replace(/[/\\]+$/, '').split(sep).filter(Boolean);
+        if (parts.length <= 1) return;
+        const parent = parts.slice(0, -1).join(sep) + (parts.length === 2 && parts[0]!.endsWith(':') ? sep : '');
+        handleExplorerNavigate(exTabId, parent);
+    }, [handleExplorerNavigate]);
+
+    const handleExplorerPlayFile = useCallback(async (exTabId: string, filePath: string) => {
+        const ex = fileExplorersRef.current[exTabId];
+        if (!ex) return;
+        try {
+            let videoTabId = ex.videoTabId;
+            if (!videoTabId) {
+                videoTabId = await OpenPlaylistVideo(filePath);
+                if (activeTabIdRef.current === exTabId) {
+                    await SwitchTab(videoTabId);
+                }
+            } else {
+                await LoadFile(videoTabId, filePath);
+            }
+            setFileExplorers(prev => ({
+                ...prev,
+                [exTabId]: { ...prev[exTabId]!, videoTabId, playingPath: filePath },
+            }));
+            setInfo({ time_pos: 0, duration: 0, paused: false } as main.PlaybackInfo);
+        } catch (e) {
+            debugLog('ExplorerPlay', 'ERROR: ' + e);
+        }
+    }, []);
+
+    const handleExplorerCloseVideo = useCallback(async () => {
+        const exTabId = activeTabIdRef.current;
+        if (!exTabId) return;
+        const ex = fileExplorersRef.current[exTabId];
+        if (!ex?.videoTabId) return;
+        await CloseTab(ex.videoTabId);
+        setFileExplorers(prev => ({
+            ...prev,
+            [exTabId]: { ...prev[exTabId]!, videoTabId: null, playingPath: null },
+        }));
+        await SwitchTab('');
+        setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
+    }, []);
+
+    const handleExplorerViewChange = useCallback((exTabId: string, view: FileExplorerViewType) => {
+        setFileExplorers(prev => ({ ...prev, [exTabId]: { ...prev[exTabId]!, viewType: view } }));
+    }, []);
+
+    const handleExplorerGridSizeChange = useCallback((exTabId: string, size: number) => {
+        setFileExplorers(prev => ({ ...prev, [exTabId]: { ...prev[exTabId]!, gridSize: size } }));
+    }, []);
+
+    const handleExplorerSortChange = useCallback((exTabId: string, sortBy: FileExplorerSortBy, sortDir: 'asc' | 'desc') => {
+        setFileExplorers(prev => ({ ...prev, [exTabId]: { ...prev[exTabId]!, sortBy, sortDir } }));
+    }, []);
+
+    const handleExplorerSelectionChange = useCallback((exTabId: string, path: string | null) => {
+        setFileExplorers(prev => ({ ...prev, [exTabId]: { ...prev[exTabId]!, selectedPath: path } }));
+    }, []);
 
     const handlePlaylistCloseVideo = useCallback(async () => {
         const plsTabId = activeTabIdRef.current;
@@ -473,6 +632,7 @@ function App() {
             const curVidId: string | null =
                 curTab?.type === 'video' ? activeTabId :
                 curTab?.type === 'playlist' ? ((activeTabId ? playlists[activeTabId]?.videoTabId : null) ?? null) :
+                curTab?.type === 'fileexplorer' ? ((activeTabId ? fileExplorers[activeTabId]?.videoTabId : null) ?? null) :
                 null;
             const isPlaying = (curVidId ? tabsStateRef.current[curVidId] : undefined) ?? !infoRef.current.paused;
             if (curVidId && isPlaying) {
@@ -485,16 +645,20 @@ function App() {
         let goTabId = '';
         if (tab?.type === 'video') goTabId = tabId;
         else if (tab?.type === 'playlist') goTabId = playlists[tabId]?.videoTabId ?? '';
+        else if (tab?.type === 'fileexplorer') goTabId = fileExplorers[tabId]?.videoTabId ?? '';
         await SwitchTab(goTabId);
         setActiveTabId(tabId ?? null);
         if (!goTabId) setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
 
         if (preferencesRef.current?.oneVideoAtATime && tabId === autoPausedTabIdRef.current) {
             autoPausedTabIdRef.current = null;
-            const vidId = tab?.type === 'video' ? tabId : (tabId ? playlists[tabId]?.videoTabId : undefined);
+            const vidId = tab?.type === 'video' ? tabId
+                : tab?.type === 'playlist' ? (tabId ? playlists[tabId]?.videoTabId : undefined)
+                : tab?.type === 'fileexplorer' ? (tabId ? fileExplorers[tabId]?.videoTabId : undefined)
+                : undefined;
             if (vidId) setTimeout(() => TogglePlayback(vidId).catch(console.error), 150);
         }
-    }, [activeTabId, tabs, playlists]);
+    }, [activeTabId, tabs, playlists, fileExplorers]);
 
     const handleCloseTab = useCallback(async (tabId: string) => {
         if (renameTabIdRef.current === tabId) setRenameTabId(null);
@@ -505,6 +669,7 @@ function App() {
         if (tab) {
             const entry: ClosedTabEntry = { type: tab.type, ...(tab.path !== undefined ? { path: tab.path } : {}) };
             if (tab.type === 'playlist') entry.playlistItems = playlists[tabId]?.items ?? [];
+            if (tab.type === 'fileexplorer') { const p = fileExplorers[tabId]?.currentPath; if (p) entry.explorerPath = p; }
             closedTabsRef.current.push(entry);
         }
 
@@ -514,6 +679,10 @@ function App() {
             const pls = playlists[tabId];
             if (pls?.videoTabId) await CloseTab(pls.videoTabId);
             setPlaylists(prev => { const n = { ...prev }; delete n[tabId]; return n; });
+        } else if (tab?.type === 'fileexplorer') {
+            const ex = fileExplorers[tabId];
+            if (ex?.videoTabId) await CloseTab(ex.videoTabId);
+            setFileExplorers(prev => { const n = { ...prev }; delete n[tabId]; return n; });
         }
 
         const newTabs = tabs.filter(t => t.id !== tabId);
@@ -524,11 +693,12 @@ function App() {
             let nextGoTabId = '';
             if (next?.type === 'video') nextGoTabId = next.id;
             else if (next?.type === 'playlist') nextGoTabId = (next.id ? playlists[next.id]?.videoTabId : undefined) ?? '';
+            else if (next?.type === 'fileexplorer') nextGoTabId = (next.id ? fileExplorers[next.id]?.videoTabId : undefined) ?? '';
             await SwitchTab(nextGoTabId);
             setActiveTabId(next?.id ?? null);
             if (!nextGoTabId) setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
         }
-    }, [tabs, activeTabId, playlists]);
+    }, [tabs, activeTabId, playlists, fileExplorers]);
 
     const handleTearOff = useCallback(async (tabId: string) => {
         await TearOffTab(tabId).catch(console.error);
@@ -818,6 +988,9 @@ function App() {
                 } else if (activeTab?.type === 'playlist' && (activeTabId ? playlists[activeTabId]?.videoTabId : null)) {
                     e.preventDefault();
                     handlePlaylistCloseVideo();
+                } else if (activeTab?.type === 'fileexplorer' && (activeTabId ? fileExplorers[activeTabId]?.videoTabId : null)) {
+                    e.preventDefault();
+                    handleExplorerCloseVideo();
                 }
             }
             if (e.code === 'F3' && !e.shiftKey) { e.preventDefault(); openPageTab('debug'); }
@@ -897,8 +1070,22 @@ function App() {
                     openVideoPath(last.path);
                 } else if (last.type === 'playlist') {
                     openNewPlaylist(last.playlistItems ?? []);
-                } else if (last.type !== 'video') {
-                    openPageTab(last.type);
+                } else if (last.type === 'fileexplorer' && last.explorerPath) {
+                    // Reopen a file explorer tab by simulating folder selection
+                    (() => {
+                        const folder = last.explorerPath!;
+                        const id = `fileexplorer-${Date.now()}`;
+                        const folderName = folder.split(/[\\/]/).pop() || folder;
+                        SwitchTab('').catch(console.error);
+                        setFileExplorers(prev => ({
+                            ...prev,
+                            [id]: { currentPath: folder, history: [], forwardHistory: [], viewType: 'details', gridSize: 160, sortBy: 'name', sortDir: 'asc', selectedPath: null, videoTabId: null, playingPath: null },
+                        }));
+                        setTabs(prev => [...prev, { id, type: 'fileexplorer', title: folderName }]);
+                        setActiveTabId(id);
+                    })();
+                } else if (last.type !== 'video' && last.type !== 'fileexplorer') {
+                    openPageTab(last.type as PageTabType);
                 }
             }
             if (e.ctrlKey && e.code === 'Tab' && tabs.length > 1) {
@@ -939,12 +1126,14 @@ function App() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [activeTabId, activeTab, tabs, isFullscreen, info, playlists, recentOverlayOpen,
+    }, [activeTabId, activeTab, tabs, isFullscreen, info, playlists, fileExplorers, recentOverlayOpen,
         renameTabId, effectiveVideoTabId, handleCloseTab, handleSwitchTab, handleTogglePlayback,
         handleOpenFile, openPageTab, openVideoPath, openNewPlaylist, openFolderAsPlaylist,
-        handlePlaylistNext, handlePlaylistPrev, handlePlaylistCloseVideo, openRenameBar, setTabs]);
+        openFileExplorer, handlePlaylistNext, handlePlaylistPrev, handlePlaylistCloseVideo,
+        handleExplorerCloseVideo, openRenameBar, setTabs]);
 
     const isPlaylistPlaying = activeTab?.type === 'playlist' && !!(activeTabId ? playlists[activeTabId]?.videoTabId : null);
+    const isFileExplorerPlaying = activeTab?.type === 'fileexplorer' && !!(activeTabId ? fileExplorers[activeTabId]?.videoTabId : null);
     const effectiveHeight = isFullscreen ? viewportH : Math.min(viewportH, window.screen.availHeight);
 
     return (
@@ -962,6 +1151,7 @@ function App() {
                     onOpenPreferences={() => openPageTab('preferences')}
                     onNewPlaylist={openNewPlaylist}
                     onOpenFolderAsPlaylist={openFolderAsPlaylist}
+                    onOpenFolder={openFileExplorer}
                     onReorder={handleReorderTab}
                     onOpenRecentOverlay={() => setRecentOverlayOpen(true)}
                     version={version}
@@ -987,7 +1177,7 @@ function App() {
                         profileInfo={profileInfo}
                     />
                 )}
-                {(activeTab?.type === 'video' || isPlaylistPlaying) && (
+                {(activeTab?.type === 'video' || isPlaylistPlaying || isFileExplorerPlaying) && (
                     <>
                         <PassionPlayerWrapper
                             info={info}
@@ -1024,6 +1214,29 @@ function App() {
                         )}
                     </>
                 )}
+                {activeTab?.type === 'fileexplorer' && activeTabId && fileExplorers[activeTabId] && (() => {
+                    const ex = fileExplorers[activeTabId]!;
+                    return (
+                        <FileExplorerPage
+                            state={ex}
+                            onNavigate={(path) => handleExplorerNavigate(activeTabId, path)}
+                            onBack={() => handleExplorerBack(activeTabId)}
+                            onForward={() => handleExplorerForward(activeTabId)}
+                            onUp={() => handleExplorerUp(activeTabId)}
+                            onPlayFile={(path) => handleExplorerPlayFile(activeTabId, path)}
+                            onOpenInNewTab={openVideoPath}
+                            onCloseVideo={handleExplorerCloseVideo}
+                            onNextFile={() => {/* handled inside FileExplorerPage */}}
+                            onPrevFile={() => {/* handled inside FileExplorerPage */}}
+                            onViewChange={(view) => handleExplorerViewChange(activeTabId, view)}
+                            onGridSizeChange={(size) => handleExplorerGridSizeChange(activeTabId, size)}
+                            onSortChange={(sortBy, dir) => handleExplorerSortChange(activeTabId, sortBy, dir)}
+                            onSelectionChange={(path) => handleExplorerSelectionChange(activeTabId, path)}
+                            isVideoPlaying={isFileExplorerPlaying}
+                            videoUIVisible={videoUIVisible}
+                        />
+                    );
+                })()}
                 {activeTab?.type === 'playlist' && !isPlaylistPlaying && activeTabId && (
                     <PlaylistPage
                         playlist={playlists[activeTabId]}

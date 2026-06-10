@@ -15,6 +15,7 @@ interface Props {
     onOpenPreferences: () => void;
     onNewPlaylist: () => void;
     onOpenFolderAsPlaylist: () => void;
+    onOpenFolder: () => void;
     onReorder: (fromId: string, toId: string) => void;
     onOpenRecentOverlay: () => void;
     version: string;
@@ -32,7 +33,7 @@ export default function TabBar({
     tabs, activeTabId, tabsState,
     onSwitch, onClose,
     onOpenFile, onOpenDebug, onOpenChangelog, onOpenPreferences,
-    onNewPlaylist, onOpenFolderAsPlaylist,
+    onNewPlaylist, onOpenFolderAsPlaylist, onOpenFolder,
     onReorder,
     onOpenRecentOverlay,
     version, isWorking,
@@ -145,6 +146,7 @@ export default function TabBar({
                 {menuOpen && (
                     <div className="dropdown" onClick={e => e.stopPropagation()}>
                         {menuItemWithShortcut('Open File…', 'Ctrl+O', onOpenFile)}
+                        {menuItem('Open Folder…', onOpenFolder)}
                         {menuItemWithShortcut('Open Folder as Playlist…', 'Ctrl+K, Ctrl+O', onOpenFolderAsPlaylist)}
                         {menuItemWithShortcut('New Playlist', 'Ctrl+K, Ctrl+P', onNewPlaylist)}
 
@@ -208,6 +210,7 @@ export default function TabBar({
                             tab.id === activeTabId ? 'active' : '',
                             tab.type !== 'video' ? 'tab-page' : '',
                             tab.type === 'playlist' ? 'tab-playlist' : '',
+                            tab.type === 'fileexplorer' ? 'tab-fileexplorer' : '',
                             tab.id === draggingId ? 'tab-dragging' : '',
                             tabsState[tab.id] ? 'tab-is-playing' : '',
                         ].filter(Boolean).join(' ')}

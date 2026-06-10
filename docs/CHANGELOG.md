@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.2.12] — 2026-06-10
+- Feat: file explorer tab — details/list/grid views, sort by name/size/duration/type/date, editable location bar, HJKL navigation, on-demand thumbnails, seek-thumb hover preview in grid view, embedded video playback with prev/next/close overlay
+
 ## [0.2.11] — 2026-06-10
 - Fix: "Open file location" — Explorer window now receives focus via AllowSetForegroundWindow(ASFW_ANY), letting Explorer foreground itself without polling
 
