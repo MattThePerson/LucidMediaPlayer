@@ -1,6 +1,6 @@
 import appIconUrl from '../assets/images/appicon.png';
 
-export default function HomeScreen({ version, isDragging, onOpenChangelog, onOpenFile, onOpenFolderAsPlaylist, onNewPlaylist, profile }) {
+export default function HomeScreen({ version, isDragging, onOpenChangelog, onOpenFile, onOpenFolderAsPlaylist, onNewPlaylist, profileInfo }) {
     return (
         <div className="home-screen">
             <img className="home-icon" src={appIconUrl} />
@@ -8,6 +8,12 @@ export default function HomeScreen({ version, isDragging, onOpenChangelog, onOpe
             <div className="home-version" onClick={onOpenChangelog} role="button" tabIndex={0}>
                 Version {version}
             </div>
+            {profileInfo?.color && (
+                <div className="home-profile-badge">
+                    <span className="home-profile-dot" style={{ background: profileInfo.color }} />
+                    {profileInfo.name}
+                </div>
+            )}
             <div className="home-shortcuts">
                 <div className="home-shortcut-hint clickable" onClick={onOpenFile} role="button" tabIndex={0}>
                     <kbd>Ctrl+O</kbd>

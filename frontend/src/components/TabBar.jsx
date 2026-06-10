@@ -9,6 +9,7 @@ export default function TabBar({
     onReorder,
     onOpenRecentOverlay,
     version, isWorking,
+    profileInfo, profiles, onOpenProfile, onOpenManageProfiles, onMenuOpen,
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [draggingId, setDraggingId] = useState(null);
@@ -104,8 +105,11 @@ export default function TabBar({
 
     return (
         <div className="tab-bar">
-            <div className="tab-menu-btn" ref={menuRef} onClick={() => setMenuOpen(o => !o)}>
+            <div className="tab-menu-btn" ref={menuRef} onClick={() => { const next = !menuOpen; setMenuOpen(next); if (next) onMenuOpen?.(); }}>
                 ☰
+                {profileInfo?.color && (
+                    <span className="profile-dot" style={{ background: profileInfo.color }} />
+                )}
                 {menuOpen && (
                     <div className="dropdown" onClick={e => e.stopPropagation()}>
                         {menuItemWithShortcut('Open File…', 'Ctrl+O', onOpenFile)}
@@ -124,6 +128,38 @@ export default function TabBar({
                         </div>
                         <div className="dropdown-separator" />
                         {menuItemWithShortcut('Settings', 'Ctrl+,', onOpenPreferences)}
+                        <div className="dropdown-separator" />
+
+                        <div className="dropdown-submenu-wrapper">
+                            <div className="dropdown-item dropdown-item-has-submenu">
+                                <span className="dropdown-profile-label">
+                                    {profileInfo?.color && (
+                                        <span className="dropdown-profile-dot" style={{ background: profileInfo.color }} />
+                                    )}
+                                    Profile: {profileInfo?.name || 'Default'}
+                                </span>
+                                <span className="dropdown-submenu-arrow">▶</span>
+                            </div>
+                            <div className="dropdown-submenu">
+                                {(profiles ?? []).map(p => (
+                                    <div
+                                        key={p.id}
+                                        className={`dropdown-item dropdown-profile-option${p.id === profileInfo?.id ? ' is-active' : ''}`}
+                                        onClick={p.id !== profileInfo?.id ? () => { closeMenu(); onOpenProfile(p.id); } : undefined}
+                                    >
+                                        {p.color
+                                            ? <span className="dropdown-profile-dot" style={{ background: p.color }} />
+                                            : <span className="dropdown-profile-dot-empty" />
+                                        }
+                                        <span>{p.name}</span>
+                                        {p.id === profileInfo?.id && <span className="dropdown-check">✓</span>}
+                                    </div>
+                                ))}
+                                <div className="dropdown-separator" />
+                                {menuItem('Manage Profiles…', onOpenManageProfiles)}
+                            </div>
+                        </div>
+
                         <div className="dropdown-separator" />
                         {menuItem('Quit', () => Quit())}
                     </div>

@@ -4,31 +4,32 @@ package main
 
 import (
 	"bufio"
-	"strings"
 	"net"
 	"os"
-	// "time"
+	"strings"
 
-	// "github.com/Microsoft/go-winio"
+	"lucidmediaplayer/internal/config"
 )
 
-const socketPath = "/tmp/lucidmediaplayer.sock"
+func instanceSocketPath() string {
+	return "/tmp/lucidmediaplayer-" + *config.Profile + ".sock"
+}
 
 func trySendToExistingInstance(filePath string) bool {
-    conn, err := net.Dial("unix", socketPath)
-    if err != nil {
-        return false
-    }
-    defer conn.Close()
+	conn, err := net.Dial("unix", instanceSocketPath())
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
 
-    _, err = conn.Write([]byte(filePath + "\n"))
-    return err == nil
+	_, err = conn.Write([]byte(filePath + "\n"))
+	return err == nil
 }
 
 func startInstanceServer(onFile func(string)) {
-    os.Remove(socketPath)
+	os.Remove(instanceSocketPath())
 
-    l, err := net.Listen("unix", socketPath)
+	l, err := net.Listen("unix", instanceSocketPath())
     if err != nil {
         return
     }

@@ -57,6 +57,38 @@ export namespace main {
 	        this.oneVideoAtATime = source["oneVideoAtATime"];
 	    }
 	}
+	export class ProfileEntry {
+	    id: string;
+	    name: string;
+	    color: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProfileEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.color = source["color"];
+	    }
+	}
+	export class ProfileInfo {
+	    id: string;
+	    name: string;
+	    color: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProfileInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.color = source["color"];
+	    }
+	}
 	export class TrackInfo {
 	    id: number;
 	    type: string;

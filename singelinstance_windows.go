@@ -8,15 +8,18 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
+	"lucidmediaplayer/internal/config"
 )
 
-const instancePipeName = `\\.\pipe\LucidMediaPlayer-instance`
+func instancePipeName() string {
+	return `\\.\pipe\LucidMediaPlayer-` + *config.Profile
+}
 
 // trySendToExistingInstance dials the instance pipe and sends filePath.
 // Returns true if an existing instance received it (caller should exit).
 func trySendToExistingInstance(filePath string) bool {
 	timeout := 500 * time.Millisecond
-	conn, err := winio.DialPipe(instancePipeName, &timeout)
+	conn, err := winio.DialPipe(instancePipeName(), &timeout)
 	if err != nil {
 		return false
 	}
@@ -29,7 +32,7 @@ func trySendToExistingInstance(filePath string) bool {
 // onFile is called in a goroutine for each received path.
 // If the pipe name is already owned by another instance, this is a no-op.
 func startInstanceServer(onFile func(string)) {
-	l, err := winio.ListenPipe(instancePipeName, nil)
+	l, err := winio.ListenPipe(instancePipeName(), nil)
 	if err != nil {
 		// Another instance already owns the pipe — we're secondary, ignore.
 		return

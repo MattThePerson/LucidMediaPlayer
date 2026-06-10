@@ -14,6 +14,14 @@ export function CloseTab(arg1) {
   return window['go']['main']['App']['CloseTab'](arg1);
 }
 
+export function CreateProfile(arg1, arg2) {
+  return window['go']['main']['App']['CreateProfile'](arg1, arg2);
+}
+
+export function DeleteProfile(arg1) {
+  return window['go']['main']['App']['DeleteProfile'](arg1);
+}
+
 export function FrameStep(arg1, arg2) {
   return window['go']['main']['App']['FrameStep'](arg1, arg2);
 }
@@ -44,6 +52,14 @@ export function GetPreferences() {
 
 export function GetProfile() {
   return window['go']['main']['App']['GetProfile']();
+}
+
+export function GetProfileInfo() {
+  return window['go']['main']['App']['GetProfileInfo']();
+}
+
+export function GetProfiles() {
+  return window['go']['main']['App']['GetProfiles']();
 }
 
 export function GetRecentFiles() {
@@ -82,6 +98,10 @@ export function OpenPlaylistVideo(arg1) {
   return window['go']['main']['App']['OpenPlaylistVideo'](arg1);
 }
 
+export function OpenProfile(arg1) {
+  return window['go']['main']['App']['OpenProfile'](arg1);
+}
+
 export function OpenSubtitleFilePicker() {
   return window['go']['main']['App']['OpenSubtitleFilePicker']();
 }
@@ -92,6 +112,14 @@ export function OpenVideo(arg1) {
 
 export function RegenerateSeekThumbnails(arg1) {
   return window['go']['main']['App']['RegenerateSeekThumbnails'](arg1);
+}
+
+export function RenameProfile(arg1, arg2) {
+  return window['go']['main']['App']['RenameProfile'](arg1, arg2);
+}
+
+export function ReorderProfiles(arg1) {
+  return window['go']['main']['App']['ReorderProfiles'](arg1);
 }
 
 export function ResizeVideo() {
@@ -108,6 +136,10 @@ export function Seek(arg1, arg2) {
 
 export function SetPlaybackSpeed(arg1, arg2) {
   return window['go']['main']['App']['SetPlaybackSpeed'](arg1, arg2);
+}
+
+export function SetProfileColor(arg1, arg2) {
+  return window['go']['main']['App']['SetProfileColor'](arg1, arg2);
 }
 
 export function SetSubtitleTrack(arg1, arg2) {

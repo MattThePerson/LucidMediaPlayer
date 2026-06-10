@@ -10,6 +10,10 @@ export function ClearRecentFiles():Promise<void>;
 
 export function CloseTab(arg1:string):Promise<void>;
 
+export function CreateProfile(arg1:string,arg2:string):Promise<main.ProfileEntry>;
+
+export function DeleteProfile(arg1:string):Promise<void>;
+
 export function FrameStep(arg1:string,arg2:number):Promise<void>;
 
 export function GetAllTabsState():Promise<Record<string, boolean>>;
@@ -25,6 +29,10 @@ export function GetPlaybackInfo(arg1:string):Promise<main.PlaybackInfo>;
 export function GetPreferences():Promise<main.Preferences>;
 
 export function GetProfile():Promise<string>;
+
+export function GetProfileInfo():Promise<main.ProfileInfo>;
+
+export function GetProfiles():Promise<Array<main.ProfileEntry>>;
 
 export function GetRecentFiles():Promise<Array<db.RecentEntry>>;
 
@@ -44,11 +52,17 @@ export function OpenFolderPicker():Promise<string>;
 
 export function OpenPlaylistVideo(arg1:string):Promise<string>;
 
+export function OpenProfile(arg1:string):Promise<void>;
+
 export function OpenSubtitleFilePicker():Promise<string>;
 
 export function OpenVideo(arg1:string):Promise<string>;
 
 export function RegenerateSeekThumbnails(arg1:string):Promise<void>;
+
+export function RenameProfile(arg1:string,arg2:string):Promise<void>;
+
+export function ReorderProfiles(arg1:Array<string>):Promise<void>;
 
 export function ResizeVideo():Promise<void>;
 
@@ -57,6 +71,8 @@ export function SavePreferences(arg1:main.Preferences):Promise<void>;
 export function Seek(arg1:string,arg2:number):Promise<void>;
 
 export function SetPlaybackSpeed(arg1:string,arg2:number):Promise<void>;
+
+export function SetProfileColor(arg1:string,arg2:string):Promise<void>;
 
 export function SetSubtitleTrack(arg1:string,arg2:number):Promise<void>;
 

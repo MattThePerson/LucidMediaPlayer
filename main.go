@@ -21,9 +21,28 @@ var assets embed.FS
 func main() {
 
     // Profile
-    config.Profile = flag.String("profile", "Default", "profile to use")
+    config.Profile = flag.String("profile", "default", "profile to use")
     flag.Parse()
-    fmt.Printf("starting with profile: \"%s\"\n", *config.Profile)
+
+    // Validate the profile exists in profiles.json (creates the file with "Default" on first run).
+    {
+        profiles, err := loadProfiles()
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "error loading profiles: %v\n", err)
+            os.Exit(1)
+        }
+        found := false
+        for _, p := range profiles {
+            if p.ID == *config.Profile {
+                found = true
+                break
+            }
+        }
+        if !found {
+            fmt.Fprintf(os.Stderr, "error: profile %q not found\n", *config.Profile)
+            os.Exit(1)
+        }
+    }
 
     // Parse the file path from "Open with" or file association launch.
 	var startupFile string

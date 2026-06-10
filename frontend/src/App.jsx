@@ -4,11 +4,13 @@ import {
     OpenPlaylistVideo, LoadFile,
     SwitchTab, CloseTab,
     TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
-    ToggleFullscreen, GetVersion, GetProfile, GetRecentFiles, ClearRecentFiles,
+    ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
     ResizeVideo, SetVolume, GetSeekThumbnailData,
     GetPreferences, SavePreferences, StartSeekThumbnailGeneration, RegenerateSeekThumbnails,
     GetSubtitleState, SetSubtitleTrack, AddSubtitleFile, OpenSubtitleFilePicker,
     FrameStep, SetPlaybackSpeed, SetVideoFilter,
+    GetProfileInfo, GetProfiles, CreateProfile, RenameProfile, SetProfileColor,
+    DeleteProfile, ReorderProfiles, OpenProfile,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
@@ -21,9 +23,10 @@ import ChangelogPage from './components/ChangelogPage';
 import Notification from './components/Notification';
 import PreferencesPage from './components/PreferencesPage';
 import PlaylistPage from './components/PlaylistPage';
+import ManageProfilesPage from './components/ManageProfilesPage';
 
-// Each tab: { id, type: 'video'|'debug'|'changelog'|'preferences'|'playlist', title, path? }
-const PAGE_TITLES = { debug: 'Debug', changelog: 'Changelog', preferences: 'Settings' };
+// Each tab: { id, type: 'video'|'debug'|'changelog'|'preferences'|'playlist'|'manageprofiles', title, path? }
+const PAGE_TITLES = { debug: 'Debug', changelog: 'Changelog', preferences: 'Settings', manageprofiles: 'Profiles' };
 
 function App() {
     const [tabs, setTabs] = useState([]);
@@ -32,7 +35,8 @@ function App() {
     const [tabsState, setTabsState] = useState({});
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [version, setVersion] = useState('');
-    const [profile, setProfile] = useState('');
+    const [profileInfo, setProfileInfo] = useState({ id: '', name: '', color: '' });
+    const [profiles, setProfiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
     const [recentFiles, setRecentFiles] = useState([]);
     const [seekThumbs, setSeekThumbs] = useState(null);
@@ -265,7 +269,8 @@ function App() {
     // [openVideoPath]
     useEffect(() => {
         GetVersion().then(setVersion).catch(() => { });
-        GetProfile().then(setProfile).catch(() => { });
+        GetProfileInfo().then(setProfileInfo).catch(() => { });
+        GetProfiles().then(setProfiles).catch(() => { });
         GetRecentFiles().then(setRecentFiles).catch(() => {});
         GetPreferences().then(setPreferences).catch(() => {});
 
@@ -622,6 +627,49 @@ function App() {
         setPreferences(prefs);
     }, []);
 
+    const handleCreateProfile = useCallback(async (name, color) => {
+        const entry = await CreateProfile(name, color);
+        setProfiles(prev => [...prev, entry]);
+        return entry;
+    }, []);
+
+    const handleRenameProfile = useCallback(async (id, newName) => {
+        await RenameProfile(id, newName);
+        setProfiles(prev => prev.map(p => p.id === id ? { ...p, name: newName } : p));
+        setProfileInfo(prev => prev.id === id ? { ...prev, name: newName } : prev);
+    }, []);
+
+    const handleSetProfileColor = useCallback(async (id, color) => {
+        await SetProfileColor(id, color);
+        setProfiles(prev => prev.map(p => p.id === id ? { ...p, color } : p));
+        setProfileInfo(prev => prev.id === id ? { ...prev, color } : prev);
+    }, []);
+
+    const handleDeleteProfile = useCallback(async (id) => {
+        await DeleteProfile(id);
+        setProfiles(prev => prev.filter(p => p.id !== id));
+    }, []);
+
+    const handleReorderProfiles = useCallback(async (ids) => {
+        await ReorderProfiles(ids);
+        setProfiles(prev => {
+            const byId = Object.fromEntries(prev.map(p => [p.id, p]));
+            return ids.map(id => byId[id]).filter(Boolean);
+        });
+    }, []);
+
+    const handleOpenProfile = useCallback((id) => {
+        OpenProfile(id).catch(console.error);
+    }, []);
+
+    const refreshProfiles = useCallback(() => {
+        GetProfiles().then(setProfiles).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        if (activeTab?.type === 'manageprofiles') refreshProfiles();
+    }, [activeTab?.type, refreshProfiles]);
+
     useEffect(() => {
         const onKey = (e) => {
             const tag = document.activeElement?.tagName;
@@ -796,6 +844,11 @@ function App() {
                     onOpenRecentOverlay={() => setRecentOverlayOpen(true)}
                     version={version}
                     isWorking={isWorking}
+                    profileInfo={profileInfo}
+                    profiles={profiles}
+                    onOpenProfile={handleOpenProfile}
+                    onOpenManageProfiles={() => openPageTab('manageprofiles')}
+                    onMenuOpen={refreshProfiles}
                 />
             )}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
@@ -807,7 +860,7 @@ function App() {
                         onOpenFile={handleOpenFile}
                         onOpenFolderAsPlaylist={openFolderAsPlaylist}
                         onNewPlaylist={openNewPlaylist}
-                        profile={profile}
+                        profileInfo={profileInfo}
                     />
                 )}
                 {(activeTab?.type === 'video' || isPlaylistPlaying) && (
@@ -864,6 +917,18 @@ function App() {
                 {activeTab?.type === 'changelog' && <ChangelogPage />}
                 {activeTab?.type === 'preferences' && (
                     <PreferencesPage preferences={preferences} onSave={handleSavePreferences} />
+                )}
+                {activeTab?.type === 'manageprofiles' && (
+                    <ManageProfilesPage
+                        profiles={profiles}
+                        activeProfileId={profileInfo.id}
+                        onCreate={handleCreateProfile}
+                        onRename={handleRenameProfile}
+                        onSetColor={handleSetProfileColor}
+                        onDelete={handleDeleteProfile}
+                        onReorder={handleReorderProfiles}
+                        onOpen={handleOpenProfile}
+                    />
                 )}
             </div>
             {recentOverlayOpen && (

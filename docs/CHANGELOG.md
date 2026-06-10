@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.3] — 2026-06-10
+- Fix: profile color dot no longer pushes "Profile:" text right in dropdown (wrapped in flex label)
+- Fix: delete profile now shows a popup modal instead of inline button swap
+- Fix: opening Manage Profiles tab or hamburger menu now re-reads profiles.json for cross-instance sync
+
+## [0.2.2] — 2026-06-10
+- Fix: opening a profile now spawns a new visible window without closing the current one
+- Fix: profile IDs are now human-readable names (e.g. "Default", "Gaming") used as folder keys
+- Fix: launching with a non-existent `-profile` flag now exits immediately with an error
+- Fix: profile menu is now a flyout submenu ("Profile: <name> ▶") instead of an inline list
+- Fix: profile name cursor is now a text cursor; delete requires confirmation
+- Rename: "Switch profile" → "Open profile" throughout UI
+
+## [0.2.1] — 2026-06-10
+- Feat: profile system — create, rename, reorder, color-code, and switch profiles
+- Feat: profile color indicator on hamburger button and home screen
+- Feat: Manage Profiles page tab with inline rename, color picker, drag-reorder, switch, delete
+- Feat: per-profile data isolation (watch history, settings) via `-profile <id>` CLI flag
+- Fix: single-instance pipe/socket names are now profile-specific (multiple profiles can run simultaneously)
+
 ## [0.2.0] — 2026-06-10
 - Renamed: Lucid Player -> Lucid Media Player
 
