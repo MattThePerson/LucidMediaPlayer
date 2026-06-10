@@ -13,14 +13,14 @@
 
 ## Project overview
 
-**Lucid Media Player** — a desktop video player built with [Wails v2](https://wails.io/) (Go backend + React/JSX frontend). Video playback uses **mpv** as a subprocess whose window is embedded into the Wails parent window via Win32 HWND (`--wid`). The UI (tabs, controls, overlays) is rendered by WebView2 on top.
+**Lucid Media Player** — a desktop video player built with [Wails v2](https://wails.io/) (Go backend + React/TypeScript frontend). Video playback uses **mpv** as a subprocess whose window is embedded into the Wails parent window via Win32 HWND (`--wid`). The UI (tabs, controls, overlays) is rendered by WebView2 on top.
 
 ### Tech stack
 
 | Layer | Technology |
 |---|---|
 | Framework | Wails v2 (Go 1.25+) |
-| Frontend | React 18, JSX, plain CSS (no Tailwind) |
+| Frontend | React 18, TypeScript 6, TSX, plain CSS (no Tailwind) |
 | Bundler | Vite (managed by Wails) |
 | Video backend | mpv subprocess, Win32 HWND embedding |
 | IPC to mpv | Named pipe (`\\.\pipe\mpvsocket-<tabID>`) via `go-winio` |
@@ -38,6 +38,13 @@ wails build        # production binary
 `frontend/wailsjs/go/models.ts` from Go exported methods. If you add a new Go
 method, restart `wails dev` (or wait for it to detect the change) to get the
 binding. You can also write the binding manually in those files as a stopgap.
+
+Type-check only (no emit — Vite handles compilation):
+```
+cd frontend && npx tsc --noEmit
+```
+
+**tsconfig.json key settings:** `module: ESNext`, `moduleResolution: bundler` (Vite-appropriate — allows extensionless imports), `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`, `allowJs: true` (needed to import `PassionPlayer.js` from TSX files).
 
 ---
 
@@ -94,23 +101,26 @@ Wails window  (Win32 parent HWND)
 
 | File | Role |
 |---|---|
-| `frontend/src/App.jsx` | Root component — all global state, effects, keyboard shortcuts, tab logic |
+| `frontend/src/App.tsx` | Root component — all global state, effects, keyboard shortcuts, tab logic |
 | `frontend/src/style.css` | All CSS (single file) |
-| `frontend/src/debug.js` | Global debug log store (`useSyncExternalStore`); `debugLog()` and `getDebugLogs()` callable from anywhere |
-| `frontend/src/components/TabBar.jsx` | Tab bar, hamburger menu, profile flyout submenu, drag-reorder, tear-off detection |
-| `frontend/src/components/HomeScreen.jsx` | Home screen with inline SVG logo, profile badge, drag-over overlay |
-| `frontend/src/components/PassionPlayerWrapper.jsx` | Thin React wrapper around `PassionPlayer.js`; ref-based callbacks to avoid stale closures on tab switch |
-| `frontend/src/passion_player/PassionPlayer.js` | **Pure-JS, no JSX** video player — Shadow DOM, self-contained CSS. Headless mode (no `<video>`) used with mpv; HTML5 mode available for standalone use |
-| `frontend/src/components/ManageProfilesPage.jsx` | Profile list with drag-reorder, inline rename, color picker, open/delete; page-level delete modal |
-| `frontend/src/components/PreferencesPage.jsx` | Settings form (seek thumbnails, single-instance, click-to-toggle, etc.) |
-| `frontend/src/components/PlaylistPage.jsx` | Playlist manager with drag-reorder, random, play/remove |
-| `frontend/src/components/RecentFilesOverlay.jsx` | Modal overlay showing recent files; opened with `Ctrl+R` |
-| `frontend/src/components/Notification.jsx` | Transient in-player notification banner |
-| `frontend/src/components/DebugPage.jsx` | Live log viewer |
-| `frontend/src/components/ChangelogPage.jsx` | Renders embedded CHANGELOG.md |
+| `frontend/src/types.ts` | Shared TypeScript types: `Tab`, `TabType`, `PageTabType`, `PlaylistState`, `PlaylistsMap`, `NotificationEntry`, `ClosedTabEntry`, `LogEntry` |
+| `frontend/src/debug.ts` | Global debug log store (`useSyncExternalStore`); `debugLog()` and `getDebugLogs()` callable from anywhere |
+| `frontend/src/vite-env.d.ts` | `/// <reference types="vite/client" />` — enables PNG/CSS import types |
+| `frontend/src/components/TabBar.tsx` | Tab bar, hamburger menu, profile flyout submenu, drag-reorder, tear-off detection |
+| `frontend/src/components/HomeScreen.tsx` | Home screen with inline SVG logo, profile badge, drag-over overlay |
+| `frontend/src/components/PassionPlayerWrapper.tsx` | Thin React wrapper around `PassionPlayer.js`; ref-based callbacks to avoid stale closures on tab switch |
+| `frontend/src/passion_player/PassionPlayer.js` | **Pure-JS, no TSX** video player — Shadow DOM, self-contained CSS. Headless mode (no `<video>`) used with mpv; HTML5 mode available for standalone use. **Not migrated to TS** — typed via `.d.ts` sidecar |
+| `frontend/src/passion_player/PassionPlayer.d.ts` | TypeScript declaration sidecar — types the public API of `PassionPlayer.js` for importers |
+| `frontend/src/components/ManageProfilesPage.tsx` | Profile list with drag-reorder, inline rename, color picker, open/delete; page-level delete modal |
+| `frontend/src/components/PreferencesPage.tsx` | Settings form (seek thumbnails, single-instance, click-to-toggle, etc.) |
+| `frontend/src/components/PlaylistPage.tsx` | Playlist manager with drag-reorder, random, play/remove |
+| `frontend/src/components/RecentFilesOverlay.tsx` | Modal overlay showing recent files; opened with `Ctrl+R` |
+| `frontend/src/components/Notification.tsx` | Transient in-player notification banner |
+| `frontend/src/components/DebugPage.tsx` | Live log viewer |
+| `frontend/src/components/ChangelogPage.tsx` | Renders embedded CHANGELOG.md |
 | `frontend/wailsjs/go/main/App.js` | **Auto-generated** JS bindings — do not hand-edit unless `wails dev` isn't running |
-| `frontend/wailsjs/go/main/App.d.ts` | **Auto-generated** TypeScript types |
-| `frontend/wailsjs/go/models.ts` | **Auto-generated** model classes |
+| `frontend/wailsjs/go/main/App.d.ts` | **Auto-generated** TypeScript types for Go methods |
+| `frontend/wailsjs/go/models.ts` | **Auto-generated** model classes (`main.PlaybackInfo`, `main.Preferences`, `main.ProfileEntry`, `main.TrackInfo`, `db.RecentEntry`, `thumbs.SeekThumbnailData`, etc.) |
 
 ### Data / config
 
@@ -127,11 +137,16 @@ Wails window  (Win32 parent HWND)
 
 ## Tab model
 
-Tabs are frontend-only state in `App.jsx`:
+Tabs are frontend-only state in `App.tsx`. The canonical types live in `src/types.ts`:
 
-```js
-// { id: string, type: 'video'|'playlist'|'debug'|'changelog'|'preferences'|'manageprofiles', title: string }
-const [tabs, setTabs] = useState([]);
+```ts
+// src/types.ts
+export type PageTabType = 'debug' | 'changelog' | 'preferences' | 'manageprofiles';
+export type TabType = 'video' | 'playlist' | PageTabType;
+export interface Tab { id: string; type: TabType; title: string; path?: string; }
+
+// App.tsx
+const [tabs, setTabs] = useState<Tab[]>([]);
 ```
 
 - **Video tabs** have a matching entry in Go's `app.tabs` map (keyed by the same `id`). All Go methods (`SwitchTab`, `CloseTab`, etc.) operate on this id.
@@ -244,13 +259,13 @@ CREATE TABLE IF NOT EXISTS videos (
 
 ## PassionPlayer (frontend/src/passion_player/PassionPlayer.js)
 
-Pure-JS, no JSX. Uses Shadow DOM with inlined CSS (`getStyles()`) — fully self-contained, safe to symlink into non-React projects.
+Pure-JS, no TSX. Uses Shadow DOM with inlined CSS (`getStyles()`) — fully self-contained, safe to symlink into non-React projects. **Kept as `.js`** — too large (1,805 lines) to migrate; typed via `PassionPlayer.d.ts` sidecar instead.
 
 - **HTML5 mode**: pass `src` option → real `<video>` inside Shadow DOM.
 - **Headless mode** (used in Wails): no `<video>`; UI driven by `player.setState({currentTime, duration, paused})` and fires `onPlay`/`onPause`/`onSeek`/`onFullscreen` callbacks.
 - Shadow root persists across `destroy()` (React Strict Mode safe): `this.shadow = el.shadowRoot ?? el.attachShadow({mode:'open'}); this.shadow.innerHTML = '';`
 
-`PassionPlayerWrapper.jsx` uses **ref-based callbacks** (`onTogglePlaybackRef.current = onTogglePlayback`) so the long-lived player instance always calls the current tab's handlers after tab switches. Mount-once `useEffect` creates the player; a `[info]` effect calls `setState`.
+`PassionPlayerWrapper.tsx` uses **ref-based callbacks** (`onTogglePlaybackRef.current = onTogglePlayback`) so the long-lived player instance always calls the current tab's handlers after tab switches. Mount-once `useEffect` creates the player; a `[info]` effect calls `setState`.
 
 ---
 
@@ -260,9 +275,9 @@ Pure-JS, no JSX. Uses Shadow DOM with inlined CSS (`getStyles()`) — fully self
 
 Must match `.tab-bar { height: 36px }` in CSS. Used in `positionChildWindow` to offset the mpv child window below the tab bar. **If you change the CSS height, update the Go constant too.**
 
-### File drop: use JS-side `OnFileDrop`, not Go's `runtime.OnFileDrop`
+### File drop: use TS-side `OnFileDrop`, not Go's `runtime.OnFileDrop`
 
-```js
+```ts
 // CORRECT — works with WebView2
 import { OnFileDrop } from '../wailsjs/runtime/runtime';
 OnFileDrop((x, y, paths) => { ... }, false);
@@ -299,12 +314,12 @@ The AppData directory is `LucidMediaPlayer` (no spaces). The window title is `"L
 
 ## Debug logging
 
-```js
+```ts
 import { debugLog } from '../debug';
 debugLog('MyComponent', 'something happened');
 
 // Go backend
-a.emitDebug("source", "message")  // → emits 'debug-log' event → JS EventsOn → debugLog()
+a.emitDebug("source", "message")  // → emits 'debug-log' event → TS EventsOn → debugLog()
 ```
 
 View logs in the **Debug** page tab (hamburger → Debug). `Ctrl+Shift+C` copies all entries to clipboard.
@@ -326,7 +341,7 @@ Each video tab gets `\\.\pipe\mpvsocket-<tabID>`. Newline-delimited JSON. The re
 | **Wails v2** | Medium | Wails v2→v3 had significant breaking changes (new runtime API, different window model). Upgrading would touch `main.go`, `app.go`, all `runtime.*` calls, and the JS bindings |
 | **`go-winio`** | Low | Stable, Microsoft-maintained; named pipes are a Win32 primitive unlikely to change |
 | **`modernc.org/sqlite`** | Low | Pure-Go SQLite; tracks upstream SQLite releases; no CGO |
-| **React + plain CSS** | Very low | CSS is a W3C standard; React is dominant and stable. The most durable layer in the stack |
+| **React + TypeScript + plain CSS** | Very low | CSS is a W3C standard; React is dominant and stable; TypeScript is the de-facto standard for React. The most durable layer in the stack |
 | **WebView2 (Windows)** | Low | Evergreen, auto-updated with Edge; Microsoft has strong backward-compat guarantees |
 | **WebKit2GTK (Linux)** | Low–Medium | Wails uses it on Linux; version requirements can drift with distros |
 
