@@ -1,4 +1,15 @@
 import { useRef, useState, useEffect } from 'react';
+import type { PlaylistState } from '../types';
+
+interface Props {
+    playlist: PlaylistState | null | undefined;
+    onPlay: (idx: number) => void;
+    onRemove: (idx: number) => void;
+    onReorder: (fromIdx: number, toIdx: number) => void;
+    onToggleRandom: () => void;
+    onAddFiles: () => void;
+    onSelectionChange: (idx: number) => void;
+}
 
 export default function PlaylistPage({
     playlist,
@@ -8,18 +19,18 @@ export default function PlaylistPage({
     onToggleRandom,
     onAddFiles,
     onSelectionChange,
-}) {
-    const listRef = useRef(null);
-    const draggedIdxRef = useRef(null);
-    const [dragOverIdx, setDragOverIdx] = useState(null);
+}: Props) {
+    const listRef = useRef<HTMLDivElement>(null);
+    const draggedIdxRef = useRef<number | null>(null);
+    const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
     useEffect(() => { listRef.current?.focus(); }, []);
 
     const { items = [], selectedIndex = -1, currentIndex = -1, random = false } = playlist ?? {};
 
-    const filename = (path) => path.split(/[\\/]/).pop();
+    const filename = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (items.length === 0) return;
         if (e.code === 'ArrowDown') {
             e.preventDefault();

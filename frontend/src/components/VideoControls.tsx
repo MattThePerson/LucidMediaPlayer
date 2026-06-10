@@ -1,4 +1,6 @@
-function formatTime(secs) {
+import type { main } from '../../wailsjs/go/models';
+
+function formatTime(secs: number): string {
     if (!secs || isNaN(secs)) return '0:00';
     const h = Math.floor(secs / 3600);
     const m = Math.floor((secs % 3600) / 60);
@@ -7,8 +9,15 @@ function formatTime(secs) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function VideoControls({ info, onTogglePlayback, onSeek, onDoubleClick }) {
-    const handleSeek = (e) => {
+interface Props {
+    info: main.PlaybackInfo;
+    onTogglePlayback: () => void;
+    onSeek: (pos: number) => void;
+    onDoubleClick: () => void;
+}
+
+export default function VideoControls({ info, onTogglePlayback, onSeek, onDoubleClick }: Props) {
+    const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
         const rect = e.currentTarget.getBoundingClientRect();
         onSeek((e.clientX - rect.left) / rect.width);
     };

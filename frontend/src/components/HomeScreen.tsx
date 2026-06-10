@@ -1,6 +1,17 @@
 import appIconUrl from '../assets/images/appicon.png';
+import type { main } from '../../wailsjs/go/models';
 
-export default function HomeScreen({ version, isDragging, onOpenChangelog, onOpenFile, onOpenFolderAsPlaylist, onNewPlaylist, profileInfo }) {
+interface Props {
+    version: string;
+    isDragging: boolean;
+    onOpenChangelog: () => void;
+    onOpenFile: () => void;
+    onOpenFolderAsPlaylist: () => void;
+    onNewPlaylist: () => void;
+    profileInfo: main.ProfileInfo;
+}
+
+export default function HomeScreen({ version, isDragging, onOpenChangelog, onOpenFile, onOpenFolderAsPlaylist, onNewPlaylist, profileInfo }: Props) {
     return (
         <div className="home-screen">
             <img className="home-icon" src={appIconUrl} />

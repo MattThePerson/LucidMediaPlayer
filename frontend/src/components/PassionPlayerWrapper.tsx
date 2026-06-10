@@ -1,6 +1,33 @@
 import { useEffect, useRef } from 'react';
 import { PassionPlayer } from '../passion_player/PassionPlayer.js';
 import { debugLog } from '../debug';
+import type { main } from '../../wailsjs/go/models';
+import type { SeekThumbs } from '../types';
+
+interface Props {
+    info: main.PlaybackInfo;
+    seekThumbs: SeekThumbs | null;
+    onTogglePlayback: () => void;
+    onSeek: (pos: number) => void;
+    onFullscreen: () => void;
+    onVolumeChange: (vol: number) => void;
+    onUIVisible: (visible: boolean) => void;
+    clickToTogglePlayback: boolean;
+    subtitleText: string;
+    subtitleTracks: main.TrackInfo[];
+    activeSid: number;
+    onSubtitleChange: (sid: number) => void;
+    onAddSubtitleFile: () => void;
+    onFrameStep: (dir: number) => void;
+    onSpeedChange: (speed: number) => void;
+    onMpvFilterChange: (vf: string, name: string) => void;
+    onCssFilterChange?: (filter: string, name: string) => void;
+    onThumbnailSizeChange?: (mult: number) => void;
+    title: string;
+    controlsOverlayKey?: string;
+    disableKeybinds: boolean;
+    thumbnailSize?: number;
+}
 
 export default function PassionPlayerWrapper({
     info, seekThumbs,
@@ -8,9 +35,9 @@ export default function PassionPlayerWrapper({
     subtitleText, subtitleTracks, activeSid, onSubtitleChange, onAddSubtitleFile,
     onFrameStep, onSpeedChange, onMpvFilterChange, onCssFilterChange, onThumbnailSizeChange,
     title, controlsOverlayKey, disableKeybinds, thumbnailSize,
-}) {
-    const hostRef = useRef(null);
-    const playerRef = useRef(null);
+}: Props) {
+    const hostRef = useRef<HTMLDivElement>(null);
+    const playerRef = useRef<PassionPlayer | null>(null);
 
     const onTogglePlaybackRef = useRef(onTogglePlayback);
     const onSeekRef = useRef(onSeek);

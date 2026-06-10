@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { GetChangelog } from '../../wailsjs/go/main/App';
 
-function renderChangelog(md) {
+function renderChangelog(md: string): JSX.Element[] {
     const lines = md.split('\n');
-    const out = [];
-    let listBuffer = [];
+    const out: JSX.Element[] = [];
+    let listBuffer: JSX.Element[] = [];
 
     const flushList = () => {
         if (listBuffer.length) {

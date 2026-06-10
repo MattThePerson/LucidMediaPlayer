@@ -1,8 +1,14 @@
 import { useCallback } from 'react';
+import type { main } from '../../wailsjs/go/models';
 
-export default function PreferencesPage({ preferences, onSave }) {
-    const handleToggle = useCallback((key) => (e) => {
-        onSave({ ...preferences, [key]: e.target.checked });
+interface Props {
+    preferences: main.Preferences;
+    onSave: (prefs: main.Preferences) => void;
+}
+
+export default function PreferencesPage({ preferences, onSave }: Props) {
+    const handleToggle = useCallback((key: keyof main.Preferences) => (e: React.ChangeEvent<HTMLInputElement>) => {
+        onSave({ ...preferences, [key]: e.target.checked } as main.Preferences);
     }, [preferences, onSave]);
 
     return (

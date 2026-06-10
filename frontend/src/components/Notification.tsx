@@ -1,12 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
+import type { NotificationEntry } from '../types';
 
-export default function Notification({ notification }) {
-    const [current, setCurrent] = useState(notification);
+interface Props {
+    notification: NotificationEntry | null;
+}
+
+export default function Notification({ notification }: Props) {
+    const [current, setCurrent] = useState<NotificationEntry | null>(notification);
     const [exiting, setExiting] = useState(false);
-    const exitTimerRef = useRef(null);
+    const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        clearTimeout(exitTimerRef.current);
+        if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
         if (notification) {
             setExiting(false);
             setCurrent(notification);
@@ -17,7 +22,7 @@ export default function Notification({ notification }) {
                 setExiting(false);
             }, 220);
         }
-        return () => clearTimeout(exitTimerRef.current);
+        return () => { if (exitTimerRef.current) clearTimeout(exitTimerRef.current); };
     }, [notification]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!current) return null;

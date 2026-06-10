@@ -1,11 +1,17 @@
 import { useState, useRef } from 'react';
+import type { main } from '../../wailsjs/go/models';
 
 const PRESET_COLORS = [
     '#e05c5c', '#e08c3c', '#d4c44a', '#5cba6e', '#4d8cff', '#9b5ce0',
     '#e05c9b', '#5cc8e0', '#c87c4a', '#6e5ce0', '#a0a0a0', '#e0e0e0',
 ];
 
-function ColorPicker({ current, onSelect }) {
+interface ColorPickerProps {
+    current: string;
+    onSelect: (color: string) => void;
+}
+
+function ColorPicker({ current, onSelect }: ColorPickerProps) {
     return (
         <div className="color-picker-grid">
             <button
@@ -28,11 +34,24 @@ function ColorPicker({ current, onSelect }) {
     );
 }
 
-function ProfileRow({ profile, isActive, onRename, onSetColor, onOpen, onRequestDelete, onDragStart, onDragOver, onDrop, isDraggingOver }) {
+interface ProfileRowProps {
+    profile: main.ProfileEntry;
+    isActive: boolean;
+    onRename: (id: string, newName: string) => void;
+    onSetColor: (id: string, color: string) => void;
+    onOpen: (id: string) => void;
+    onRequestDelete: (profile: main.ProfileEntry) => void;
+    onDragStart: (e: React.DragEvent<HTMLDivElement>, id: string) => void;
+    onDragOver: (id: string) => void;
+    onDrop: (id: string) => void;
+    isDraggingOver: boolean;
+}
+
+function ProfileRow({ profile, isActive, onRename, onSetColor, onOpen, onRequestDelete, onDragStart, onDragOver, onDrop, isDraggingOver }: ProfileRowProps) {
     const [editing, setEditing] = useState(false);
     const [nameVal, setNameVal] = useState(profile.name);
     const [showPicker, setShowPicker] = useState(false);
-    const inputRef = useRef(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     const commitRename = () => {
         setEditing(false);
@@ -50,7 +69,7 @@ function ProfileRow({ profile, isActive, onRename, onSetColor, onOpen, onRequest
         setTimeout(() => inputRef.current?.select(), 0);
     };
 
-    const handleColorSelect = (color) => {
+    const handleColorSelect = (color: string) => {
         setShowPicker(false);
         onSetColor(profile.id, color);
     };
@@ -124,7 +143,13 @@ function ProfileRow({ profile, isActive, onRename, onSetColor, onOpen, onRequest
     );
 }
 
-function DeleteModal({ profile, onConfirm, onCancel }) {
+interface DeleteModalProps {
+    profile: main.ProfileEntry;
+    onConfirm: () => void;
+    onCancel: () => void;
+}
+
+function DeleteModal({ profile, onConfirm, onCancel }: DeleteModalProps) {
     return (
         <div className="profile-delete-backdrop" onClick={onCancel}>
             <div className="profile-delete-dialog" onClick={e => e.stopPropagation()}>
@@ -140,21 +165,32 @@ function DeleteModal({ profile, onConfirm, onCancel }) {
     );
 }
 
-export default function ManageProfilesPage({ profiles, activeProfileId, onCreate, onRename, onSetColor, onDelete, onReorder, onOpen }) {
-    const [dragId, setDragId] = useState(null);
-    const [overId, setOverId] = useState(null);
-    const [deleteTarget, setDeleteTarget] = useState(null);
+interface Props {
+    profiles: main.ProfileEntry[];
+    activeProfileId: string;
+    onCreate: (name: string, color: string) => Promise<main.ProfileEntry>;
+    onRename: (id: string, newName: string) => void;
+    onSetColor: (id: string, color: string) => void;
+    onDelete: (id: string) => void;
+    onReorder: (ids: string[]) => void;
+    onOpen: (id: string) => void;
+}
 
-    const handleDragStart = (e, id) => {
+export default function ManageProfilesPage({ profiles, activeProfileId, onCreate, onRename, onSetColor, onDelete, onReorder, onOpen }: Props) {
+    const [dragId, setDragId] = useState<string | null>(null);
+    const [overId, setOverId] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<main.ProfileEntry | null>(null);
+
+    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
         setDragId(id);
         e.dataTransfer.effectAllowed = 'move';
     };
 
-    const handleDragOver = (id) => {
+    const handleDragOver = (id: string) => {
         if (id !== dragId) setOverId(id);
     };
 
-    const handleDrop = (targetId) => {
+    const handleDrop = (targetId: string) => {
         if (!dragId || dragId === targetId) { setDragId(null); setOverId(null); return; }
         const ids = profiles.map(p => p.id);
         const fromIdx = ids.indexOf(dragId);
@@ -169,7 +205,7 @@ export default function ManageProfilesPage({ profiles, activeProfileId, onCreate
     };
 
     const handleCreate = async () => {
-        const color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+        const color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)] ?? '';
         await onCreate('New Profile', color);
     };
 

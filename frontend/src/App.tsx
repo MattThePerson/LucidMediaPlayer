@@ -24,74 +24,71 @@ import Notification from './components/Notification';
 import PreferencesPage from './components/PreferencesPage';
 import PlaylistPage from './components/PlaylistPage';
 import ManageProfilesPage from './components/ManageProfilesPage';
+import type { Tab, PlaylistState, PlaylistsMap, TabsStateMap, SeekThumbs, NotificationEntry, ClosedTabEntry, PageTabType } from './types';
+import type { main, db } from '../wailsjs/go/models';
 
-// Each tab: { id, type: 'video'|'debug'|'changelog'|'preferences'|'playlist'|'manageprofiles', title, path? }
-const PAGE_TITLES = { debug: 'Debug', changelog: 'Changelog', preferences: 'Settings', manageprofiles: 'Profiles' };
+const PAGE_TITLES: Record<PageTabType, string> = { debug: 'Debug', changelog: 'Changelog', preferences: 'Settings', manageprofiles: 'Profiles' };
 
 function App() {
-    const [tabs, setTabs] = useState([]);
-    const [activeTabId, setActiveTabId] = useState(null);
-    const [info, setInfo] = useState({ time_pos: 0, duration: 0, paused: true, volume: 100 });
-    const [tabsState, setTabsState] = useState({});
+    const [tabs, setTabs] = useState<Tab[]>([]);
+    const [activeTabId, setActiveTabId] = useState<string | null>(null);
+    const [info, setInfo] = useState<main.PlaybackInfo>({ time_pos: 0, duration: 0, paused: true, volume: 100 } as main.PlaybackInfo);
+    const [tabsState, setTabsState] = useState<TabsStateMap>({});
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [version, setVersion] = useState('');
-    const [profileInfo, setProfileInfo] = useState({ id: '', name: '', color: '' });
-    const [profiles, setProfiles] = useState([]);
+    const [profileInfo, setProfileInfo] = useState<main.ProfileInfo>({ id: '', name: '', color: '' } as main.ProfileInfo);
+    const [profiles, setProfiles] = useState<main.ProfileEntry[]>([]);
     const [isDragging, setIsDragging] = useState(false);
-    const [recentFiles, setRecentFiles] = useState([]);
-    const [seekThumbs, setSeekThumbs] = useState(null);
-    const [notification, setNotification] = useState(null);
+    const [recentFiles, setRecentFiles] = useState<db.RecentEntry[]>([]);
+    const [seekThumbs, setSeekThumbs] = useState<SeekThumbs | null>(null);
+    const [notification, setNotification] = useState<NotificationEntry | null>(null);
     const [isWorking, setIsWorking] = useState(false);
     const [subtitleText, setSubtitleText] = useState('');
-    const [subtitleTracks, setSubtitleTracks] = useState([]);
+    const [subtitleTracks, setSubtitleTracks] = useState<main.TrackInfo[]>([]);
     const [activeSid, setActiveSid] = useState(0);
     const [recentOverlayOpen, setRecentOverlayOpen] = useState(false);
     const [videoUIVisible, setVideoUIVisible] = useState(false);
     const [viewportH, setViewportH] = useState(window.innerHeight);
-    const [preferences, setPreferences] = useState({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false });
-    // playlists: { [playlistTabId]: { items, selectedIndex, currentIndex, random, videoTabId, playedIndices } }
-    const [playlists, setPlaylists] = useState({});
+    const [preferences, setPreferences] = useState<main.Preferences>({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false, oneVideoAtATime: false } as main.Preferences);
+    const [playlists, setPlaylists] = useState<PlaylistsMap>({});
 
-    const closedTabsRef = useRef([]);
-    const notifTimerRef = useRef(null);
-    const promptDelayRef = useRef(null);
-    const localTimeRef = useRef(0); // optimistic seek accumulator — updated on poll + seek
+    const closedTabsRef = useRef<ClosedTabEntry[]>([]);
+    const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const promptDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const localTimeRef = useRef(0);
     const chordActiveRef = useRef(false);
-    const chordTimerRef = useRef(null);
-    const autoPausedTabIdRef = useRef(null);
-    // Refs so event listeners with stale closures can reach current state
-    const playlistsRef = useRef(playlists);
+    const chordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const autoPausedTabIdRef = useRef<string | null>(null);
+    const playlistsRef = useRef<PlaylistsMap>(playlists);
     playlistsRef.current = playlists;
-    const activeTabRef = useRef(null);
-    const activeTabIdRef = useRef(null);
-    const preferencesRef = useRef(preferences);
+    const activeTabRef = useRef<Tab | null>(null);
+    const activeTabIdRef = useRef<string | null>(null);
+    const preferencesRef = useRef<main.Preferences>(preferences);
     preferencesRef.current = preferences;
-    const infoRef = useRef(info);
+    const infoRef = useRef<main.PlaybackInfo>(info);
     infoRef.current = info;
-    const tabsStateRef = useRef(tabsState);
+    const tabsStateRef = useRef<TabsStateMap>(tabsState);
     tabsStateRef.current = tabsState;
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
     activeTabRef.current = activeTab;
     activeTabIdRef.current = activeTabId;
 
-    // The Go tab ID that's actually playing (null when no video is active)
-    const effectiveVideoTabId =
+    const effectiveVideoTabId: string | null =
         activeTab?.type === 'video' ? activeTabId :
-        activeTab?.type === 'playlist' ? (playlists[activeTabId]?.videoTabId ?? null) :
+        activeTab?.type === 'playlist' ? (activeTabId ? (playlists[activeTabId]?.videoTabId ?? null) : null) :
         null;
-    const effectiveVideoTabIdRef = useRef(effectiveVideoTabId);
+    const effectiveVideoTabIdRef = useRef<string | null>(effectiveVideoTabId);
     effectiveVideoTabIdRef.current = effectiveVideoTabId;
 
-    // tabsState with playlist tabs mapped to their underlying video tab's play state
-    const effectiveTabsState = { ...tabsState };
+    const effectiveTabsState: TabsStateMap = { ...tabsState };
     for (const [plsTabId, pls] of Object.entries(playlists)) {
         if (pls.videoTabId) effectiveTabsState[plsTabId] = tabsState[pls.videoTabId] ?? false;
     }
 
     // ── Playlist mutations ──────────────────────────────────────────────────────
 
-    const handlePlaylistAddFiles = useCallback((plsTabId, paths) => {
+    const handlePlaylistAddFiles = useCallback((plsTabId: string, paths: string[]) => {
         setPlaylists(prev => {
             const pls = prev[plsTabId];
             if (!pls) return prev;
@@ -99,7 +96,7 @@ function App() {
         });
     }, []);
 
-    const handlePlaylistRemoveItem = useCallback((plsTabId, index) => {
+    const handlePlaylistRemoveItem = useCallback((plsTabId: string, index: number) => {
         setPlaylists(prev => {
             const pls = prev[plsTabId];
             if (!pls) return prev;
@@ -114,12 +111,12 @@ function App() {
         });
     }, []);
 
-    const handlePlaylistReorder = useCallback((plsTabId, fromIdx, toIdx) => {
+    const handlePlaylistReorder = useCallback((plsTabId: string, fromIdx: number, toIdx: number) => {
         setPlaylists(prev => {
             const pls = prev[plsTabId];
             if (!pls) return prev;
             const items = [...pls.items];
-            const [moved] = items.splice(fromIdx, 1);
+            const moved = items.splice(fromIdx, 1)[0]!;
             items.splice(toIdx, 0, moved);
             let ci = pls.currentIndex;
             if (ci === fromIdx) ci = toIdx;
@@ -129,7 +126,7 @@ function App() {
         });
     }, []);
 
-    const handlePlaylistToggleRandom = useCallback((plsTabId) => {
+    const handlePlaylistToggleRandom = useCallback((plsTabId: string) => {
         setPlaylists(prev => {
             const pls = prev[plsTabId];
             if (!pls) return prev;
@@ -139,10 +136,10 @@ function App() {
 
     // ── Playlist play / advance ─────────────────────────────────────────────────
 
-    const handlePlaylistPlay = useCallback(async (plsTabId, index) => {
+    const handlePlaylistPlay = useCallback(async (plsTabId: string, index: number) => {
         const pls = playlistsRef.current[plsTabId];
         if (!pls || index < 0 || index >= pls.items.length) return;
-        const filePath = pls.items[index];
+        const filePath = pls.items[index]!;
         try {
             let videoTabId = pls.videoTabId;
             if (!videoTabId) {
@@ -160,54 +157,52 @@ function App() {
                     currentIndex: index,
                     selectedIndex: index,
                     videoTabId,
-                    playedIndices: prev[plsTabId].random
-                        ? [...prev[plsTabId].playedIndices.filter(i => i !== index), index]
+                    playedIndices: prev[plsTabId]!.random
+                        ? [...prev[plsTabId]!.playedIndices.filter(i => i !== index), index]
                         : [],
-                },
+                } as PlaylistState,
             }));
-            setInfo({ time_pos: 0, duration: 0, paused: false });
+            setInfo({ time_pos: 0, duration: 0, paused: false } as main.PlaybackInfo);
         } catch (e) {
             debugLog('PlaylistPlay', 'ERROR: ' + e);
         }
     }, []);
 
-    const handlePlaylistNext = useCallback((plsTabId) => {
+    const handlePlaylistNext = useCallback((plsTabId: string) => {
         const pls = playlistsRef.current[plsTabId];
         if (!pls || pls.items.length === 0) return;
-        let nextIndex;
+        let nextIndex: number;
         if (pls.random) {
             const allIdxs = pls.items.map((_, i) => i);
             const unplayed = allIdxs.filter(i => !pls.playedIndices.includes(i) && i !== pls.currentIndex);
             if (unplayed.length === 0) {
-                // All played: restart random
-                setPlaylists(prev => ({ ...prev, [plsTabId]: { ...prev[plsTabId], playedIndices: [] } }));
+                setPlaylists(prev => ({ ...prev, [plsTabId]: { ...prev[plsTabId]!, playedIndices: [] } }));
                 const candidates = allIdxs.filter(i => i !== pls.currentIndex);
                 if (candidates.length === 0) return;
-                nextIndex = candidates[Math.floor(Math.random() * candidates.length)];
+                nextIndex = candidates[Math.floor(Math.random() * candidates.length)]!;
             } else {
-                nextIndex = unplayed[Math.floor(Math.random() * unplayed.length)];
+                nextIndex = unplayed[Math.floor(Math.random() * unplayed.length)]!;
             }
         } else {
             nextIndex = pls.currentIndex + 1;
-            if (nextIndex >= pls.items.length) return; // end of playlist, stop
+            if (nextIndex >= pls.items.length) return;
         }
         handlePlaylistPlay(plsTabId, nextIndex);
     }, [handlePlaylistPlay]);
 
-    const handlePlaylistPrev = useCallback((plsTabId) => {
+    const handlePlaylistPrev = useCallback((plsTabId: string) => {
         const pls = playlistsRef.current[plsTabId];
         if (!pls || pls.items.length === 0) return;
         const prevIndex = Math.max(0, pls.currentIndex - 1);
         handlePlaylistPlay(plsTabId, prevIndex);
     }, [handlePlaylistPlay]);
 
-    // Keep a stable ref so the event listener registered once can call current handlePlaylistNext
     const handlePlaylistNextRef = useRef(handlePlaylistNext);
     handlePlaylistNextRef.current = handlePlaylistNext;
 
     // ── Playlist tab creation ───────────────────────────────────────────────────
 
-    const openNewPlaylist = useCallback((initialItems = []) => {
+    const openNewPlaylist = useCallback((initialItems: string[] = []) => {
         const id = `playlist-${Date.now()}`;
         SwitchTab('').catch(console.error);
         setPlaylists(prev => ({
@@ -234,21 +229,22 @@ function App() {
 
     const handlePlaylistCloseVideo = useCallback(async () => {
         const plsTabId = activeTabIdRef.current;
+        if (!plsTabId) return;
         const pls = playlistsRef.current[plsTabId];
         if (!pls?.videoTabId) return;
         await CloseTab(pls.videoTabId);
         setPlaylists(prev => ({
             ...prev,
-            [plsTabId]: { ...prev[plsTabId], videoTabId: null },
+            [plsTabId]: { ...prev[plsTabId]!, videoTabId: null },
         }));
         await SwitchTab('');
-        setInfo({ time_pos: 0, duration: 0, paused: true });
+        setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
     }, []);
 
     // ── Core callbacks ──────────────────────────────────────────────────────────
 
-    const openVideoPath = useCallback(async (filePath) => {
-        const filename = filePath.split(/[\\/]/).pop();
+    const openVideoPath = useCallback(async (filePath: string) => {
+        const filename = filePath.split(/[\\/]/).pop() ?? filePath;
         debugLog('OpenVideo', 'opening: ' + filePath);
         try {
             const tabId = await OpenVideo(filePath);
@@ -256,7 +252,7 @@ function App() {
             setTabs(prev => [...prev, { id: tabId, type: 'video', title: filename, path: filePath }]);
             await SwitchTab(tabId);
             setActiveTabId(tabId);
-            setInfo({ time_pos: 0, duration: 0, paused: true });
+            setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
             GetRecentFiles().then(setRecentFiles).catch(() => {});
         } catch (e) {
             debugLog('OpenVideo', 'ERROR: ' + e);
@@ -266,7 +262,6 @@ function App() {
     const handlePlaylistAddFilesRef = useRef(handlePlaylistAddFiles);
     handlePlaylistAddFilesRef.current = handlePlaylistAddFiles;
 
-    // [openVideoPath]
     useEffect(() => {
         GetVersion().then(setVersion).catch(() => { });
         GetProfileInfo().then(setProfileInfo).catch(() => { });
@@ -274,54 +269,52 @@ function App() {
         GetRecentFiles().then(setRecentFiles).catch(() => {});
         GetPreferences().then(setPreferences).catch(() => {});
 
-        const offDebugLog = EventsOn('debug-log', (payload) => {
+        const offDebugLog = EventsOn('debug-log', (payload: { source?: string; message?: string }) => {
             debugLog(payload?.source ?? 'go', payload?.message ?? String(payload));
         });
-        const offFullscreen = EventsOn('fullscreen-changed', (val) => {
+        const offFullscreen = EventsOn('fullscreen-changed', (val: boolean) => {
             setIsFullscreen(val);
             setTimeout(() => {
                 setViewportH(window.innerHeight);
                 debugLog('Fullscreen', `changed→${val} innerH=${window.innerHeight}`);
             }, 100);
         });
-        const offSubtitleText = EventsOn('subtitle-text', ({ tabID, text }) => {
+        const offSubtitleText = EventsOn('subtitle-text', ({ tabID, text }: { tabID: string; text: string }) => {
             if (tabID === effectiveVideoTabIdRef.current) setSubtitleText(text);
         });
-        const offSubtitleTracks = EventsOn('subtitle-tracks', ({ tabID, tracks, activeSid: sid }) => {
+        const offSubtitleTracks = EventsOn('subtitle-tracks', ({ tabID, tracks, activeSid: sid }: { tabID: string; tracks: main.TrackInfo[]; activeSid: number }) => {
             if (tabID === effectiveVideoTabIdRef.current) {
                 setSubtitleTracks(tracks ?? []);
                 setActiveSid(sid ?? 0);
             }
         });
-        const offOpenFile = EventsOn('open-file', (path) => {
-            // Drop into playlist if active, otherwise open new tab
+        const offOpenFile = EventsOn('open-file', (path: string) => {
             if (activeTabRef.current?.type === 'playlist') {
-                handlePlaylistAddFilesRef.current(activeTabIdRef.current, [path]);
+                handlePlaylistAddFilesRef.current(activeTabIdRef.current ?? '', [path]);
             } else {
                 openVideoPath(path);
             }
         });
 
-        // Listen for playlist-video-ended (emitted by Go when eof-reached fires in playlist mpv)
-        const offPlaylistEnded = EventsOn('playlist-video-ended', (goTabId) => {
+        const offPlaylistEnded = EventsOn('playlist-video-ended', (goTabId: string) => {
             const pls = playlistsRef.current;
-            const plsTabId = Object.keys(pls).find(k => pls[k].videoTabId === goTabId);
+            const plsTabId = Object.keys(pls).find(k => pls[k]?.videoTabId === goTabId);
             if (plsTabId) handlePlaylistNextRef.current(plsTabId);
         });
 
         OnFileDrop(async (x, y, paths) => {
             debugLog('OnFileDrop', `x=${x} y=${y} paths=${paths.join(', ')}`);
             if (activeTabRef.current?.type === 'playlist') {
-                handlePlaylistAddFilesRef.current(activeTabIdRef.current, paths);
+                handlePlaylistAddFilesRef.current(activeTabIdRef.current ?? '', paths);
             } else {
                 for (const p of paths) await openVideoPath(p);
             }
         }, false);
 
         const onDragEnter = () => { setIsDragging(true); };
-        const onDragOver = (e) => e.preventDefault();
-        const onDragLeave = (e) => { if (!e.relatedTarget) setIsDragging(false); };
-        const onDrop = (e) => {
+        const onDragOver = (e: DragEvent) => e.preventDefault();
+        const onDragLeave = (e: DragEvent) => { if (!e.relatedTarget) setIsDragging(false); };
+        const onDrop = (e: DragEvent) => {
             e.preventDefault();
             setIsDragging(false);
             const files = [...(e.dataTransfer?.files ?? [])].map(f => f.name);
@@ -346,7 +339,6 @@ function App() {
         };
     }, [openVideoPath]);
 
-    // Reset subtitle state and fetch initial track list on video tab change
     useEffect(() => {
         setSubtitleText('');
         setSubtitleTracks([]);
@@ -358,9 +350,6 @@ function App() {
         }).catch(() => {});
     }, [effectiveVideoTabId]);
 
-    // Poll playback info when a video tab or playing playlist tab is active.
-    // Fast burst (100ms) for the first 2 seconds catches the 600ms position restore on resume,
-    // then drops to 500ms. The rAF loop in PassionPlayer interpolates between polls.
     useEffect(() => {
         if (!effectiveVideoTabId) return;
         localTimeRef.current = 0;
@@ -371,26 +360,25 @@ function App() {
             }).catch(() => {});
         };
         const fastId = setInterval(poll, 100);
-        let slowId = null;
+        let slowId: ReturnType<typeof setInterval> | null = null;
         const switchTimer = setTimeout(() => {
             clearInterval(fastId);
             slowId = setInterval(poll, 500);
         }, 2000);
         return () => {
             clearInterval(fastId);
-            clearInterval(slowId);
+            if (slowId) clearInterval(slowId);
             clearTimeout(switchTimer);
         };
     }, [effectiveVideoTabId]);
 
-    // Load seek thumbnails on tab switch (video tabs only)
     useEffect(() => {
         if (!activeTabId || activeTab?.type !== 'video') {
             setSeekThumbs(null);
             setNotification(null);
             setIsWorking(false);
-            clearTimeout(notifTimerRef.current);
-            clearTimeout(promptDelayRef.current);
+            if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+            if (promptDelayRef.current) clearTimeout(promptDelayRef.current);
             return;
         }
 
@@ -408,19 +396,19 @@ function App() {
             }
         }).catch(() => setSeekThumbs(null));
 
-        const offGenerating = EventsOn('seek-thumbs-generating', (tabID) => {
+        const offGenerating = EventsOn('seek-thumbs-generating', (tabID: string) => {
             if (tabID !== activeTabId) return;
-            clearTimeout(notifTimerRef.current);
-            clearTimeout(promptDelayRef.current);
+            if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+            if (promptDelayRef.current) clearTimeout(promptDelayRef.current);
             setIsWorking(true);
             setNotification({ type: 'generating', message: 'Generating seek thumbnails...' });
             notifTimerRef.current = setTimeout(() => setNotification(null), 2000);
         });
 
-        const offReady = EventsOn('seek-thumbs-ready', (tabID) => {
+        const offReady = EventsOn('seek-thumbs-ready', (tabID: string) => {
             if (tabID !== activeTabId) return;
-            clearTimeout(notifTimerRef.current);
-            clearTimeout(promptDelayRef.current);
+            if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+            if (promptDelayRef.current) clearTimeout(promptDelayRef.current);
             setIsWorking(false);
             setNotification({ type: 'done', message: 'Seek thumbnails ready!' });
             notifTimerRef.current = setTimeout(() => setNotification(null), 2000);
@@ -432,8 +420,8 @@ function App() {
         return () => {
             offGenerating?.();
             offReady?.();
-            clearTimeout(notifTimerRef.current);
-            clearTimeout(promptDelayRef.current);
+            if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+            if (promptDelayRef.current) clearTimeout(promptDelayRef.current);
             setIsWorking(false);
         };
     }, [activeTabId, activeTab?.type, preferences.autogenerateSeekThumbs]);
@@ -446,7 +434,7 @@ function App() {
     }, []);
 
     useEffect(() => {
-        let timer;
+        let timer: ReturnType<typeof setTimeout>;
         const onResize = () => {
             setViewportH(window.innerHeight);
             debugLog('Resize', `innerH=${window.innerHeight}`);
@@ -457,19 +445,16 @@ function App() {
         return () => { clearTimeout(timer); window.removeEventListener('resize', onResize); };
     }, []);
 
-    const handleSwitchTab = useCallback(async (tabId) => {
+    const handleSwitchTab = useCallback(async (tabId: string) => {
         if (tabId === activeTabId) return;
 
-        // oneVideoAtATime: auto-pause current playing video
         if (preferencesRef.current?.oneVideoAtATime) {
             const curTab = activeTabRef.current;
-            const curVidId =
+            const curVidId: string | null =
                 curTab?.type === 'video' ? activeTabId :
-                curTab?.type === 'playlist' ? (playlists[activeTabId]?.videoTabId ?? null) :
+                curTab?.type === 'playlist' ? ((activeTabId ? playlists[activeTabId]?.videoTabId : null) ?? null) :
                 null;
-            // Use tabsStateRef (updated within 50ms of any toggle) to avoid
-            // acting on stale infoRef state when the user recently paused manually.
-            const isPlaying = tabsStateRef.current?.[curVidId] ?? !infoRef.current.paused;
+            const isPlaying = (curVidId ? tabsStateRef.current[curVidId] : undefined) ?? !infoRef.current.paused;
             if (curVidId && isPlaying) {
                 TogglePlayback(curVidId).catch(console.error);
                 autoPausedTabIdRef.current = activeTabId;
@@ -482,22 +467,21 @@ function App() {
         else if (tab?.type === 'playlist') goTabId = playlists[tabId]?.videoTabId ?? '';
         await SwitchTab(goTabId);
         setActiveTabId(tabId ?? null);
-        if (!goTabId) setInfo({ time_pos: 0, duration: 0, paused: true });
+        if (!goTabId) setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
 
-        // oneVideoAtATime: resume if returning to auto-paused tab
         if (preferencesRef.current?.oneVideoAtATime && tabId === autoPausedTabIdRef.current) {
             autoPausedTabIdRef.current = null;
-            const vidId = tab?.type === 'video' ? tabId : playlists[tabId]?.videoTabId;
+            const vidId = tab?.type === 'video' ? tabId : (tabId ? playlists[tabId]?.videoTabId : undefined);
             if (vidId) setTimeout(() => TogglePlayback(vidId).catch(console.error), 150);
         }
     }, [activeTabId, tabs, playlists]);
 
-    const handleCloseTab = useCallback(async (tabId) => {
+    const handleCloseTab = useCallback(async (tabId: string) => {
         const idx = tabs.findIndex(t => t.id === tabId);
         const tab = tabs.find(t => t.id === tabId);
 
         if (tab) {
-            const entry = { type: tab.type, path: tab.path };
+            const entry: ClosedTabEntry = { type: tab.type, ...(tab.path !== undefined ? { path: tab.path } : {}) };
             if (tab.type === 'playlist') entry.playlistItems = playlists[tabId]?.items ?? [];
             closedTabsRef.current.push(entry);
         }
@@ -517,14 +501,14 @@ function App() {
             const next = newTabs[Math.min(idx, newTabs.length - 1)] ?? null;
             let nextGoTabId = '';
             if (next?.type === 'video') nextGoTabId = next.id;
-            else if (next?.type === 'playlist') nextGoTabId = playlists[next.id]?.videoTabId ?? '';
+            else if (next?.type === 'playlist') nextGoTabId = (next.id ? playlists[next.id]?.videoTabId : undefined) ?? '';
             await SwitchTab(nextGoTabId);
             setActiveTabId(next?.id ?? null);
-            if (!nextGoTabId) setInfo({ time_pos: 0, duration: 0, paused: true });
+            if (!nextGoTabId) setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
         }
     }, [tabs, activeTabId, playlists]);
 
-    const handleTearOff = useCallback(async (tabId) => {
+    const handleTearOff = useCallback(async (tabId: string) => {
         await TearOffTab(tabId).catch(console.error);
         const idx = tabs.findIndex(t => t.id === tabId);
         const newTabs = tabs.filter(t => t.id !== tabId);
@@ -535,11 +519,11 @@ function App() {
             if (next?.type === 'video') nextGoTabId = next.id;
             await SwitchTab(nextGoTabId).catch(console.error);
             setActiveTabId(next?.id ?? null);
-            if (!nextGoTabId) setInfo({ time_pos: 0, duration: 0, paused: true });
+            if (!nextGoTabId) setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
         }
     }, [tabs, activeTabId]);
 
-    const openPageTab = useCallback((type) => {
+    const openPageTab = useCallback((type: PageTabType) => {
         const existing = tabs.find(t => t.type === type);
         if (existing) {
             handleSwitchTab(existing.id);
@@ -556,13 +540,13 @@ function App() {
         setRecentFiles([]);
     }, []);
 
-    const handleReorderTab = useCallback((fromId, toId) => {
+    const handleReorderTab = useCallback((fromId: string, toId: string) => {
         setTabs(prev => {
             const fromIdx = prev.findIndex(t => t.id === fromId);
             const toIdx = prev.findIndex(t => t.id === toId);
             if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
             const next = [...prev];
-            const [moved] = next.splice(fromIdx, 1);
+            const moved = next.splice(fromIdx, 1)[0]!;
             next.splice(toIdx, 0, moved);
             return next;
         });
@@ -583,7 +567,7 @@ function App() {
         try {
             if (activeTab?.type === 'playlist') {
                 const paths = await OpenFilePickerMultiple();
-                if (paths?.length) handlePlaylistAddFiles(activeTabId, paths);
+                if (paths?.length) handlePlaylistAddFiles(activeTabId ?? '', paths);
             } else {
                 const filePath = await OpenFilePicker();
                 if (!filePath) return;
@@ -595,31 +579,31 @@ function App() {
         }
     }, [activeTab?.type, activeTabId, openVideoPath, handlePlaylistAddFiles]);
 
-    const handleFrameStep = useCallback((dir) => {
+    const handleFrameStep = useCallback((dir: number) => {
         const vidId = effectiveVideoTabId;
         if (!vidId) return;
         FrameStep(vidId, dir).catch(console.error);
     }, [effectiveVideoTabId]);
 
-    const handleSpeedChange = useCallback((speed) => {
+    const handleSpeedChange = useCallback((speed: number) => {
         const vidId = effectiveVideoTabId;
         if (!vidId) return;
         SetPlaybackSpeed(vidId, speed).catch(console.error);
     }, [effectiveVideoTabId]);
 
-    const handleMpvFilterChange = useCallback((vfStr) => {
+    const handleMpvFilterChange = useCallback((vfStr: string) => {
         const vidId = effectiveVideoTabId;
         if (!vidId) return;
         SetVideoFilter(vidId, vfStr).catch(console.error);
     }, [effectiveVideoTabId]);
 
-    const handleVolumeChange = useCallback((vol) => {
+    const handleVolumeChange = useCallback((vol: number) => {
         const vidId = effectiveVideoTabId;
         if (!vidId) return;
         SetVolume(vidId, vol).catch(console.error);
     }, [effectiveVideoTabId]);
 
-    const handleSubtitleChange = useCallback((sid) => {
+    const handleSubtitleChange = useCallback((sid: number) => {
         const vidId = effectiveVideoTabId;
         if (!vidId) return;
         SetSubtitleTrack(vidId, sid).catch(console.error);
@@ -637,43 +621,43 @@ function App() {
         }
     }, [effectiveVideoTabId]);
 
-    const handleSavePreferences = useCallback((prefs) => {
+    const handleSavePreferences = useCallback((prefs: main.Preferences) => {
         SavePreferences(prefs).catch(console.error);
         setPreferences(prefs);
     }, []);
 
-    const handleCreateProfile = useCallback(async (name, color) => {
+    const handleCreateProfile = useCallback(async (name: string, color: string) => {
         const entry = await CreateProfile(name, color);
         setProfiles(prev => [...prev, entry]);
         return entry;
     }, []);
 
-    const handleRenameProfile = useCallback(async (id, newName) => {
+    const handleRenameProfile = useCallback(async (id: string, newName: string) => {
         await RenameProfile(id, newName);
         setProfiles(prev => prev.map(p => p.id === id ? { ...p, name: newName } : p));
         setProfileInfo(prev => prev.id === id ? { ...prev, name: newName } : prev);
     }, []);
 
-    const handleSetProfileColor = useCallback(async (id, color) => {
+    const handleSetProfileColor = useCallback(async (id: string, color: string) => {
         await SetProfileColor(id, color);
         setProfiles(prev => prev.map(p => p.id === id ? { ...p, color } : p));
         setProfileInfo(prev => prev.id === id ? { ...prev, color } : prev);
     }, []);
 
-    const handleDeleteProfile = useCallback(async (id) => {
+    const handleDeleteProfile = useCallback(async (id: string) => {
         await DeleteProfile(id);
         setProfiles(prev => prev.filter(p => p.id !== id));
     }, []);
 
-    const handleReorderProfiles = useCallback(async (ids) => {
+    const handleReorderProfiles = useCallback(async (ids: string[]) => {
         await ReorderProfiles(ids);
         setProfiles(prev => {
             const byId = Object.fromEntries(prev.map(p => [p.id, p]));
-            return ids.map(id => byId[id]).filter(Boolean);
+            return ids.map(id => byId[id]).filter((p): p is main.ProfileEntry => p !== undefined);
         });
     }, []);
 
-    const handleOpenProfile = useCallback((id) => {
+    const handleOpenProfile = useCallback((id: string) => {
         OpenProfile(id).catch(console.error);
     }, []);
 
@@ -686,8 +670,8 @@ function App() {
     }, [activeTab?.type, refreshProfiles]);
 
     useEffect(() => {
-        const onKey = (e) => {
-            const tag = document.activeElement?.tagName;
+        const onKey = (e: KeyboardEvent) => {
+            const tag = (document.activeElement as HTMLElement | null)?.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
             if (recentOverlayOpen) {
@@ -696,13 +680,10 @@ function App() {
             }
 
             const isVideo = activeTab?.type === 'video';
-            const isPlaylistPlaying = activeTab?.type === 'playlist' && playlists[activeTabId]?.videoTabId;
-            const isVideoActive = isVideo || isPlaylistPlaying;
-
-            // Ctrl+K chord — start a 1s window for Ctrl+K → Ctrl+O (open folder as playlist)
+            const isPlaylistPlaying = activeTab?.type === 'playlist' && (activeTabId ? playlists[activeTabId]?.videoTabId : null);
             if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyK') {
                 e.preventDefault();
-                clearTimeout(chordTimerRef.current);
+                if (chordTimerRef.current) clearTimeout(chordTimerRef.current);
                 chordActiveRef.current = true;
                 chordTimerRef.current = setTimeout(() => { chordActiveRef.current = false; }, 1000);
                 return;
@@ -712,13 +693,13 @@ function App() {
                 if (isFullscreen) {
                     e.preventDefault();
                     ToggleFullscreen().catch(console.error);
-                } else if (activeTab?.type === 'playlist' && playlists[activeTabId]?.videoTabId) {
+                } else if (activeTab?.type === 'playlist' && (activeTabId ? playlists[activeTabId]?.videoTabId : null)) {
                     e.preventDefault();
                     handlePlaylistCloseVideo();
                 }
             }
             if (e.code === 'F3') { e.preventDefault(); openPageTab('debug'); }
-            if (e.code === 'F5' && isVideo) {
+            if (e.code === 'F5' && isVideo && activeTabId) {
                 e.preventDefault();
                 if (e.shiftKey) {
                     RegenerateSeekThumbnails(activeTabId).catch(console.error);
@@ -727,31 +708,29 @@ function App() {
                 }
             }
 
-            // N / P — next/previous in playlist (play)
-            if (e.code === 'KeyN' && !e.ctrlKey && !e.altKey && !e.shiftKey && isPlaylistPlaying) {
+            if (e.code === 'KeyN' && !e.ctrlKey && !e.altKey && !e.shiftKey && isPlaylistPlaying && activeTabId) {
                 e.preventDefault();
                 handlePlaylistNext(activeTabId);
             }
-            if (e.code === 'KeyP' && !e.ctrlKey && !e.altKey && !e.shiftKey && isPlaylistPlaying) {
+            if (e.code === 'KeyP' && !e.ctrlKey && !e.altKey && !e.shiftKey && isPlaylistPlaying && activeTabId) {
                 e.preventDefault();
                 handlePlaylistPrev(activeTabId);
             }
 
-            // Ctrl+N / Ctrl+P — move selection in playlist list
-            if (e.ctrlKey && e.code === 'KeyN' && !e.shiftKey && !e.altKey && activeTab?.type === 'playlist') {
+            if (e.ctrlKey && e.code === 'KeyN' && !e.shiftKey && !e.altKey && activeTab?.type === 'playlist' && activeTabId) {
                 e.preventDefault();
                 const pls = playlistsRef.current[activeTabId];
-                if (pls?.items?.length > 0) {
+                if (pls && pls.items.length > 0) {
                     const next = Math.min((pls.selectedIndex < 0 ? -1 : pls.selectedIndex) + 1, pls.items.length - 1);
-                    setPlaylists(prev => ({ ...prev, [activeTabId]: { ...prev[activeTabId], selectedIndex: next } }));
+                    setPlaylists(prev => ({ ...prev, [activeTabId]: { ...prev[activeTabId]!, selectedIndex: next } }));
                 }
             }
-            if (e.ctrlKey && e.code === 'KeyP' && !e.shiftKey && !e.altKey && activeTab?.type === 'playlist' && !chordActiveRef.current) {
+            if (e.ctrlKey && e.code === 'KeyP' && !e.shiftKey && !e.altKey && activeTab?.type === 'playlist' && !chordActiveRef.current && activeTabId) {
                 e.preventDefault();
                 const pls = playlistsRef.current[activeTabId];
-                if (pls?.items?.length > 0) {
+                if (pls && pls.items.length > 0) {
                     const next = Math.max((pls.selectedIndex < 0 ? 0 : pls.selectedIndex) - 1, 0);
-                    setPlaylists(prev => ({ ...prev, [activeTabId]: { ...prev[activeTabId], selectedIndex: next } }));
+                    setPlaylists(prev => ({ ...prev, [activeTabId]: { ...prev[activeTabId]!, selectedIndex: next } }));
                 }
             }
 
@@ -762,7 +741,7 @@ function App() {
             if (e.ctrlKey && e.code === 'KeyO' && !e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 if (chordActiveRef.current) {
-                    clearTimeout(chordTimerRef.current);
+                    if (chordTimerRef.current) clearTimeout(chordTimerRef.current);
                     chordActiveRef.current = false;
                     openFolderAsPlaylist();
                 } else {
@@ -771,7 +750,7 @@ function App() {
             }
             if (e.ctrlKey && e.code === 'KeyP' && !e.shiftKey && !e.altKey && chordActiveRef.current) {
                 e.preventDefault();
-                clearTimeout(chordTimerRef.current);
+                if (chordTimerRef.current) clearTimeout(chordTimerRef.current);
                 chordActiveRef.current = false;
                 openNewPlaylist();
             }
@@ -780,7 +759,7 @@ function App() {
                 openPageTab('preferences');
             }
             if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') {
-                const text = getDebugLogs().map(e => `${e.time} [${e.source}] ${e.message}`).join('\n');
+                const text = getDebugLogs().map(entry => `${entry.time} [${entry.source}] ${entry.message}`).join('\n');
                 navigator.clipboard.writeText(text).catch(() => {});
             }
             if (e.ctrlKey && e.code === 'KeyW' && activeTabId) {
@@ -802,10 +781,11 @@ function App() {
             if (e.ctrlKey && e.code === 'Tab' && tabs.length > 1) {
                 e.preventDefault();
                 const idx = tabs.findIndex(t => t.id === activeTabId);
-                const next = e.shiftKey
+                const nextIdx = e.shiftKey
                     ? (idx - 1 + tabs.length) % tabs.length
                     : (idx + 1) % tabs.length;
-                handleSwitchTab(tabs[next].id);
+                const nextTab = tabs[nextIdx];
+                if (nextTab) handleSwitchTab(nextTab.id);
             }
             if (e.ctrlKey && e.shiftKey && (e.code === 'PageUp' || e.code === 'PageDown') && activeTabId) {
                 e.preventDefault();
@@ -815,7 +795,10 @@ function App() {
                     const newIdx = idx + dir;
                     if (newIdx < 0 || newIdx >= prev.length) return prev;
                     const next = [...prev];
-                    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+                    const a = next[idx]!;
+                    const b = next[newIdx]!;
+                    next[idx] = b;
+                    next[newIdx] = a;
                     return next;
                 });
             }
@@ -824,8 +807,9 @@ function App() {
                 const m = e.code.match(/^Digit([1-9])$/);
                 if (m) {
                     e.preventDefault();
-                    const idx = parseInt(m[1]) - 1;
-                    if (idx < tabs.length) handleSwitchTab(tabs[idx].id);
+                    const idx = parseInt(m[1]!) - 1;
+                    const targetTab = tabs[idx];
+                    if (targetTab) handleSwitchTab(targetTab.id);
                 }
             }
 
@@ -837,7 +821,7 @@ function App() {
         handleOpenFile, openPageTab, openVideoPath, openNewPlaylist, openFolderAsPlaylist,
         handlePlaylistNext, handlePlaylistPrev, handlePlaylistCloseVideo, setTabs]);
 
-    const isPlaylistPlaying = activeTab?.type === 'playlist' && !!playlists[activeTabId]?.videoTabId;
+    const isPlaylistPlaying = activeTab?.type === 'playlist' && !!(activeTabId ? playlists[activeTabId]?.videoTabId : null);
     const effectiveHeight = isFullscreen ? viewportH : Math.min(viewportH, window.screen.availHeight);
 
     return (
@@ -887,7 +871,7 @@ function App() {
                             onTogglePlayback={handleTogglePlayback}
                             onSeek={(pos) => {
                                 if (info.duration > 0) localTimeRef.current = pos * info.duration;
-                                Seek(effectiveVideoTabId, pos).catch(console.error);
+                                if (effectiveVideoTabId) Seek(effectiveVideoTabId, pos).catch(console.error);
                             }}
                             onFullscreen={() => ToggleFullscreen().catch(console.error)}
                             onVolumeChange={handleVolumeChange}
@@ -915,7 +899,7 @@ function App() {
                         )}
                     </>
                 )}
-                {activeTab?.type === 'playlist' && !isPlaylistPlaying && (
+                {activeTab?.type === 'playlist' && !isPlaylistPlaying && activeTabId && (
                     <PlaylistPage
                         playlist={playlists[activeTabId]}
                         onPlay={(idx) => handlePlaylistPlay(activeTabId, idx)}
@@ -925,7 +909,7 @@ function App() {
                         onAddFiles={handleOpenFile}
                         onSelectionChange={(idx) => setPlaylists(prev => ({
                             ...prev,
-                            [activeTabId]: { ...prev[activeTabId], selectedIndex: idx },
+                            [activeTabId]: { ...prev[activeTabId]!, selectedIndex: idx },
                         }))}
                     />
                 )}

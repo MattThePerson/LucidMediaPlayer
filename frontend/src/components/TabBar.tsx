@@ -1,5 +1,31 @@
 import { useState, useEffect, useRef } from 'react';
 import { Quit } from '../../wailsjs/runtime/runtime';
+import type { Tab, TabsStateMap } from '../types';
+import type { main } from '../../wailsjs/go/models';
+
+interface Props {
+    tabs: Tab[];
+    activeTabId: string | null;
+    tabsState: TabsStateMap;
+    onSwitch: (tabId: string) => void;
+    onClose: (tabId: string) => void;
+    onOpenFile: () => void;
+    onOpenDebug: () => void;
+    onOpenChangelog: () => void;
+    onOpenPreferences: () => void;
+    onNewPlaylist: () => void;
+    onOpenFolderAsPlaylist: () => void;
+    onReorder: (fromId: string, toId: string) => void;
+    onOpenRecentOverlay: () => void;
+    version: string;
+    isWorking: boolean;
+    profileInfo: main.ProfileInfo;
+    profiles: main.ProfileEntry[];
+    onOpenProfile: (id: string) => void;
+    onOpenManageProfiles: () => void;
+    onMenuOpen?: () => void;
+    onTearOff?: (tabId: string) => void;
+}
 
 export default function TabBar({
     tabs, activeTabId, tabsState,
@@ -11,23 +37,22 @@ export default function TabBar({
     version, isWorking,
     profileInfo, profiles, onOpenProfile, onOpenManageProfiles, onMenuOpen,
     onTearOff,
-}) {
+}: Props) {
     const [menuOpen, setMenuOpen] = useState(false);
-    const [draggingId, setDraggingId] = useState(null);
-    const menuRef = useRef(null);
-    const tabsListRef = useRef(null);
-    const draggedIdRef = useRef(null);
-    const lastOverRef = useRef(null);
+    const [draggingId, setDraggingId] = useState<string | null>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const tabsListRef = useRef<HTMLDivElement>(null);
+    const draggedIdRef = useRef<string | null>(null);
+    const lastOverRef = useRef<string | null>(null);
 
-    // Close main dropdown on outside click or Escape
     useEffect(() => {
         if (!menuOpen) return;
-        const onMouseDown = (e) => {
-            if (menuRef.current && !menuRef.current.contains(e.target)) {
+        const onMouseDown = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
                 setMenuOpen(false);
             }
         };
-        const onKey = (e) => {
+        const onKey = (e: KeyboardEvent) => {
             if (e.code === 'Escape') {
                 e.stopPropagation();
                 setMenuOpen(false);
@@ -41,9 +66,8 @@ export default function TabBar({
         };
     }, [menuOpen]);
 
-    // Document-level dragover: only X position determines target tab
     useEffect(() => {
-        const onDocDragOver = (e) => {
+        const onDocDragOver = (e: DragEvent) => {
             if (!draggedIdRef.current) return;
             e.preventDefault();
             const tabEls = tabsListRef.current?.querySelectorAll('[data-tab-id]');
@@ -51,7 +75,8 @@ export default function TabBar({
             for (const el of tabEls) {
                 const rect = el.getBoundingClientRect();
                 if (e.clientX < rect.left || e.clientX > rect.right) continue;
-                const id = el.dataset.tabId;
+                const id = (el as HTMLElement).dataset['tabId'];
+                if (!id) break;
                 if (id === draggedIdRef.current) {
                     lastOverRef.current = null;
                 } else if (id !== lastOverRef.current) {
@@ -65,14 +90,13 @@ export default function TabBar({
         return () => document.removeEventListener('dragover', onDocDragOver);
     }, [onReorder]);
 
-    const handleDragStart = (e, id) => {
+    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
         draggedIdRef.current = id;
         lastOverRef.current = null;
         setDraggingId(id);
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', id);
 
-        // Suppress the native ghost image so the tab only moves within the bar
         const ghost = document.createElement('div');
         ghost.style.cssText = 'width:1px;height:1px;position:fixed;top:-100px;left:-100px;opacity:0';
         document.body.appendChild(ghost);
@@ -80,7 +104,7 @@ export default function TabBar({
         requestAnimationFrame(() => document.body.removeChild(ghost));
     };
 
-    const handleDragEnd = (e) => {
+    const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
         const id = draggedIdRef.current;
         const tab = tabs.find(t => t.id === id);
         draggedIdRef.current = null;
@@ -97,12 +121,12 @@ export default function TabBar({
     };
 
     const closeMenu = () => setMenuOpen(false);
-    const menuItem = (label, handler) => (
+    const menuItem = (label: string, handler: () => void) => (
         <div className="dropdown-item" onClick={() => { closeMenu(); handler(); }}>
             {label}
         </div>
     );
-    const menuItemWithShortcut = (label, shortcut, handler) => (
+    const menuItemWithShortcut = (label: string, shortcut: string, handler: () => void) => (
         <div className="dropdown-item-with-shortcut" onClick={() => { closeMenu(); handler(); }}>
             <span>{label}</span>
             <span className="dropdown-shortcut">{shortcut}</span>

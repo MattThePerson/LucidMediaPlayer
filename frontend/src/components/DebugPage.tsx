@@ -3,7 +3,7 @@ import { useDebugLogs, clearDebugLogs } from '../debug';
 
 export default function DebugPage() {
     const logs = useDebugLogs();
-    const bottomRef = useRef(null);
+    const bottomRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'instant' });

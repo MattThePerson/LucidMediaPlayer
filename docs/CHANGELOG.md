@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.2.5] — 2026-06-10
+- Refactor: migrated frontend from JS/JSX to TypeScript (all 15 source files); PassionPlayer.js kept with .d.ts sidecar; tsconfig fixed for Vite/bundler target
+
 ## [0.2.4] — 2026-06-10
 - Feat: drag a video tab downward (>80px) to tear it off into a new window; position is restored automatically
 

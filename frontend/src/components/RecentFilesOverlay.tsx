@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import type { db } from '../../wailsjs/go/models';
 
-function fuzzyScore(query, str) {
+function fuzzyScore(query: string, str: string): number {
     const lq = query.toLowerCase();
     const ls = str.toLowerCase();
     let qi = 0, consecutive = 0, score = 0;
@@ -16,11 +17,18 @@ function fuzzyScore(query, str) {
     return qi === lq.length ? score : -1;
 }
 
-export default function RecentFilesOverlay({ recentFiles, onOpen, onClear, onClose }) {
+interface Props {
+    recentFiles: db.RecentEntry[];
+    onOpen: (path: string) => void;
+    onClear: () => void;
+    onClose: () => void;
+}
+
+export default function RecentFilesOverlay({ recentFiles, onOpen, onClear, onClose }: Props) {
     const [query, setQuery] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const inputRef = useRef(null);
-    const selectedItemRef = useRef(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const selectedItemRef = useRef<HTMLDivElement>(null);
 
     const filtered = useMemo(() => {
         if (!query.trim()) return recentFiles;
@@ -40,13 +48,14 @@ export default function RecentFilesOverlay({ recentFiles, onOpen, onClear, onClo
     }, [selectedIndex]);
 
     const openSelected = () => {
-        if (filtered[selectedIndex]) {
-            onOpen(filtered[selectedIndex].path);
+        const item = filtered[selectedIndex];
+        if (item) {
+            onOpen(item.path);
             onClose();
         }
     };
 
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
