@@ -110,6 +110,10 @@ export function SetSubtitleTrack(arg1, arg2) {
   return window['go']['main']['App']['SetSubtitleTrack'](arg1, arg2);
 }
 
+export function SetVideoFilter(arg1, arg2) {
+  return window['go']['main']['App']['SetVideoFilter'](arg1, arg2);
+}
+
 export function SetVolume(arg1, arg2) {
   return window['go']['main']['App']['SetVolume'](arg1, arg2);
 }

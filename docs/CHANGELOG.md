@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.34] — 2026-06-10
+- Fix: pausing now immediately shows controls regardless of whether controls were hidden or cursor is outside window
+- Fix: playhead deletion now removes the currently active playhead (not nearest by time) and seeks to the last remaining one
+- Fix: playhead 1 (roaming) now tracks current playback position live; Ctrl+N cycles through static bookmarks only
+- Feat: Shift+E / Shift+Q — jump to next/previous marker (wraps around)
+- Style: markers are now blue (rgba(80,150,255)), 3px wide with label text shown above each tick
+
+## [0.1.33] — 2026-06-10
+- Phase 2: markers (R = add, R+R = remove nearest), playheads (C = drop bookmark, hold-C = delete nearest, Ctrl+N/Ctrl+Shift+N = cycle)
+- Phase 2: G = cycle CSS filter (7 presets), H/Shift+H = cycle mpv video filter preset (6 presets)
+- Phase 2: Ctrl+Shift+Scroll adjusts seek thumbnail size (0.4×–3.0×), also works on progress bar
+- Feat: playhead 1 is a roaming indicator that follows current playback position; C drops static bookmarks
+- Fix: controls stay visible when video is paused, including when cursor leaves the window
+- Fix: app no longer starts maximized
+- Fix: progress bar fades to 20% opacity (not 0) when controls hide, so video progress stays visible
+- Fix: filename bar now fits content width with rounded bottom-right corner instead of spanning full width
+- Fix: controls bar moved down to 28px; progress bar color changed to beige (#e8d5b0)
+- Fix: subtitle overlay moved lower (60px from bottom)
+- Removed: ? keybinds overlay button (toggle via T or F1 keybind instead)
+- Style: playheads are subtle off-white thin rectangles (3×8px, rounded top corners)
+
 ## [0.1.32] — 2026-06-09
 - Feat: comprehensive keybind engine — A/D/J/L/Q/E seek, S/Space/K play-pause, W/M mute, Shift+W/S volume, X/Z frame step, Shift+X/Z speed ±0.25×, 0–9 jump to %, Home to start
 - Feat: OSD notifications bottom-left for all keybind actions (seek, volume, speed, mute)

@@ -58,6 +58,8 @@ export function SetPlaybackSpeed(arg1:string,arg2:number):Promise<void>;
 
 export function SetSubtitleTrack(arg1:string,arg2:number):Promise<void>;
 
+export function SetVideoFilter(arg1:string,arg2:string):Promise<void>;
+
 export function SetVolume(arg1:string,arg2:number):Promise<void>;
 
 export function StartSeekThumbnailGeneration(arg1:string):Promise<void>;

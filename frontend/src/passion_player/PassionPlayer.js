@@ -1,3 +1,24 @@
+// ── Filter presets ───────────────────────────────────────────────────────────
+
+const _CSS_FILTERS = [
+    { name: 'None',      filter: '' },
+    { name: 'Warm',      filter: 'sepia(0.3) saturate(1.2) brightness(1.05)' },
+    { name: 'Cold',      filter: 'hue-rotate(195deg) saturate(0.85) brightness(0.95)' },
+    { name: 'Vivid',     filter: 'saturate(1.6) contrast(1.1)' },
+    { name: 'Cinematic', filter: 'contrast(1.15) brightness(0.88) sepia(0.12)' },
+    { name: 'B&W',       filter: 'grayscale(1)' },
+    { name: 'Soft',      filter: 'brightness(1.08) contrast(0.88) saturate(0.85)' },
+];
+
+const _MPV_PRESETS = [
+    { name: 'None',      vf: '' },
+    { name: 'Sharpen',   vf: 'lavfi=[unsharp=lx=3:ly=3:la=0.8]' },
+    { name: 'Denoise',   vf: 'lavfi=[hqdn3d]' },
+    { name: 'Vivid',     vf: 'lavfi=[eq=saturation=1.5:contrast=1.1]' },
+    { name: 'Cinematic', vf: 'lavfi=[eq=contrast=1.15:brightness=-0.05]' },
+    { name: 'B&W',       vf: 'lavfi=[hue=s=0]' },
+];
+
 // ── Keybind Engine ──────────────────────────────────────────────────────────
 
 const _KEY_NAME_MAP = {
@@ -224,6 +245,10 @@ export class PassionPlayer {
         onAddSubtitleFile = null,
         onFrameStep = null,
         onSpeedChange = null,
+        onMpvFilterChange = null,
+        onCssFilterChange = null,
+        onThumbnailSizeChange = null,
+        thumbnailSize = 1.0,
     }) {
         this.player_id = player_id;
         this.src = src;
@@ -250,6 +275,9 @@ export class PassionPlayer {
         this.onAddSubtitleFile = onAddSubtitleFile;
         this.onFrameStep = onFrameStep;
         this.onSpeedChange = onSpeedChange;
+        this.onMpvFilterChange = onMpvFilterChange;
+        this.onCssFilterChange = onCssFilterChange;
+        this.onThumbnailSizeChange = onThumbnailSizeChange;
 
         this.root_element = null;
         this.shadow = null;
@@ -290,6 +318,21 @@ export class PassionPlayer {
         this._osdTimer = null;
         this._seekOsdTimer = null;
         this._volumeOsdTimer = null;
+
+        // markers & playheads
+        this._markers = [];
+        this._markerCounter = 0;
+        this._playheads = [{ id: 1, time: 0 }];
+        this._playheadCounter = 1;
+        this._activePlayheadIndex = 0;
+
+        // filters
+        this._cssFilterIndex = 0;
+        this._mpvPresetIndex = 0;
+
+        // thumbnail size (multiplier, base = 200px)
+        this._thumbSizeMultiplier = thumbnailSize;
+        this._lastRenderedDuration = 0;
 
         // drag-seek state
         this._seekDragging = false;
@@ -385,7 +428,6 @@ export class PassionPlayer {
         this._addSubtitleEventListeners();
         this._addScrollEventListeners();
         this._initControlsAutoHide();
-        this._addKeybindsToggleBtnListener();
     }
 
     _addPlayBtnEventListeners() {
@@ -428,8 +470,6 @@ export class PassionPlayer {
             if (!this.video && e.target.closest('.controls-bar')) return;
             if (!this.video && e.target.closest('#progress-bar-default')) return;
             if (!this.video && e.target.closest('.pp-keybinds-overlay')) return;
-            if (!this.video && e.target.closest('.pp-keybinds-toggle-btn')) return;
-
             if (pb_flag === false && fs_flag === false) {
                 pb_flag = true;
                 fs_flag = true;
@@ -483,10 +523,14 @@ export class PassionPlayer {
         document.addEventListener('mousemove', this._seekDragMoveHandler);
         document.addEventListener('mouseup', this._seekDragUpHandler);
 
-        // scroll on progress bar: seek ±1s
+        // scroll on progress bar: Ctrl+Shift = thumb size; else seek ±1s
         zone.addEventListener('wheel', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (e.ctrlKey && e.shiftKey) {
+                this._adjustThumbSize(e.deltaY > 0 ? -0.1 : 0.1);
+                return;
+            }
             const delta = e.deltaY > 0 ? -1 : 1;
             let newFrac;
             if (this.video) {
@@ -519,8 +563,11 @@ export class PassionPlayer {
         if (!playerDiv) return;
         playerDiv.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const delta = e.deltaY > 0 ? -5 : 5;
-            this._changeVolume(delta);
+            if (e.ctrlKey && e.shiftKey) {
+                this._adjustThumbSize(e.deltaY > 0 ? -0.1 : 0.1);
+                return;
+            }
+            this._changeVolume(e.deltaY > 0 ? -5 : 5);
         }, { passive: false });
     }
 
@@ -529,56 +576,48 @@ export class PassionPlayer {
         if (!playerDiv) return;
         this._resetHideTimer();
         playerDiv.addEventListener('mousemove', () => this._resetHideTimer());
-        playerDiv.addEventListener('mouseleave', () => { clearTimeout(this._hideTimer); this._hideControls(); });
+        playerDiv.addEventListener('mouseleave', () => {
+            clearTimeout(this._hideTimer);
+            const isPaused = this.video ? this.video.paused : this._paused;
+            if (!isPaused) this._hideControls();
+        });
         playerDiv.addEventListener('mouseenter', () => this._resetHideTimer());
     }
 
     _resetHideTimer() {
         this._showControls();
         clearTimeout(this._hideTimer);
-        this._hideTimer = setTimeout(() => this._hideControls(), 2000);
+        const isPaused = this.video ? this.video.paused : this._paused;
+        if (!isPaused) {
+            this._hideTimer = setTimeout(() => this._hideControls(), 2000);
+        }
     }
 
     _showControls() {
-        const d0 = '0ms', d5 = '500ms';
         const controls = this.$('.controls-bar');
         const progress = this.$('#progress-bar-default');
         const player = this.$('.PassionPlayer');
         const filename = this.$('.pp-filename');
-        const toggleBtn = this.$('.pp-keybinds-toggle-btn');
-        if (controls) { controls.style.transitionDuration = d0; controls.style.opacity = '1'; }
-        if (progress) { progress.style.transitionDuration = d0; progress.style.opacity = '1'; }
-        if (filename) { filename.style.transitionDuration = d0; filename.style.opacity = '1'; }
-        if (toggleBtn) { toggleBtn.style.transitionDuration = d0; toggleBtn.style.opacity = '1'; toggleBtn.style.pointerEvents = ''; }
+        if (controls) { controls.style.transitionDuration = '0ms'; controls.style.opacity = '1'; }
+        if (progress) { progress.style.transitionDuration = '0ms'; progress.style.opacity = '1'; }
+        if (filename) { filename.style.transitionDuration = '0ms'; filename.style.opacity = '1'; }
         if (player) player.style.cursor = '';
         this._controlsVisible = true;
         this.onUIVisible?.(true);
     }
 
     _hideControls() {
-        const d5 = '500ms';
         const controls = this.$('.controls-bar');
         const progress = this.$('#progress-bar-default');
         const player = this.$('.PassionPlayer');
         const filename = this.$('.pp-filename');
-        const toggleBtn = this.$('.pp-keybinds-toggle-btn');
-        if (controls) { controls.style.transitionDuration = d5; controls.style.opacity = '0'; }
-        if (progress) { progress.style.transitionDuration = d5; progress.style.opacity = '0'; }
-        if (filename) { filename.style.transitionDuration = d5; filename.style.opacity = '0'; }
-        if (toggleBtn) { toggleBtn.style.transitionDuration = d5; toggleBtn.style.opacity = '0'; toggleBtn.style.pointerEvents = 'none'; }
+        if (controls) { controls.style.transitionDuration = '500ms'; controls.style.opacity = '0'; }
+        if (progress) { progress.style.transitionDuration = '500ms'; progress.style.opacity = '0.2'; }
+        if (filename) { filename.style.transitionDuration = '500ms'; filename.style.opacity = '0'; }
         if (player) player.style.cursor = 'none';
         this._controlsVisible = false;
         this._closeSubtitleMenu();
         this.onUIVisible?.(false);
-    }
-
-    _addKeybindsToggleBtnListener() {
-        const btn = this.$('.pp-keybinds-toggle-btn');
-        if (!btn) return;
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this._toggleKeybindsOverlay();
-        });
     }
 
     // ====================================================================================================
@@ -593,6 +632,7 @@ export class PassionPlayer {
             <div class="pp-filename"></div>
 
             <div id="progress-bar-default" class="progress-bar-interact-zone">
+                <div class="pp-markers-layer"></div>
                 <div class="progress-bar-wrapper">
                     <div class="progress-bar"></div>
                 </div>
@@ -649,8 +689,6 @@ export class PassionPlayer {
                 <div class="seek-thumbnail"></div>
             </div>
 
-            <button class="pp-keybinds-toggle-btn" title="Keyboard shortcuts">?</button>
-
             <div class="pp-keybinds-overlay">
                 ${this._buildKeybindOverlayHTML()}
             </div>
@@ -691,6 +729,24 @@ export class PassionPlayer {
                 row(['Shift+S','↓'], 'Volume −5%'),
                 row(['W','M'], 'Toggle mute'),
             ].join(''))}
+            ${group('Markers', [
+                row(['R'], 'Add marker at current position'),
+                row(['R', 'R'], 'Remove nearest marker'),
+                row(['Shift+E'], 'Jump to next marker'),
+                row(['Shift+Q'], 'Jump to previous marker'),
+            ].join(''))}
+            ${group('Playheads', [
+                row(['C'], 'Add playhead at current position'),
+                row(['C', '(hold)'], 'Delete nearest playhead'),
+                row(['Ctrl+N'], 'Cycle to next playhead'),
+                row(['Ctrl+Shift+N'], 'Cycle to previous playhead'),
+            ].join(''))}
+            ${group('Filters', [
+                row(['G'], 'Cycle CSS filter (HTML5 mode)'),
+                row(['H'], 'Cycle mpv video preset →'),
+                row(['Shift+H'], 'Cycle mpv video preset ←'),
+                row(['Ctrl+Shift+Scroll'], 'Adjust seek thumbnail size'),
+            ].join(''))}
             ${group('Interface', [
                 row([overlayKey], 'Toggle this overlay'),
             ].join(''))}
@@ -713,6 +769,9 @@ export class PassionPlayer {
             'forward-45s':           'e',
             'togglePlayback':        ['s', 'space', 'k'],
             'toggleFullscreen':      'f',
+            'cycleCssFilter':        'g',
+            'cycleMpvPreset':        'h',
+            'cycleMpvPresetBack':    'shift-h',
             'volumeUp':              ['shift-w', 'upArrow'],
             'volumeDown':            ['shift-s', 'downArrow'],
             'toggleMute':            ['w', 'm'],
@@ -726,9 +785,12 @@ export class PassionPlayer {
             // Phase 2:
             'addMarker':             'r',
             'removeMarker':          'r+r',
+            'cycleMarkerNext':       'shift-e',
+            'cycleMarkerPrev':       'shift-q',
             'spawnNewPlayhead':      'c',
             'deleteCurrentPlayhead': 'c[hold]',
-            'selectPlayhead':        'ctrl+{1,2,3,4,5,6,7,8,9}',
+            'cyclePlayheadNext':     'ctrl-n',
+            'cyclePlayheadPrev':     'ctrl-shift-n',
             'addLoopPoint':          'v',
             'removeLoopPoint':       'v+v',
             'toggleLooping':         'shift-v',
@@ -778,11 +840,19 @@ export class PassionPlayer {
             case 'increasePlaybackSpeed': this._changeSpeed(+0.25); break;
             case 'decreasePlaybackSpeed': this._changeSpeed(-0.25); break;
             case 'toggleKeybindsOverlay': this._toggleKeybindsOverlay(); break;
-            // Phase 2 — silent no-ops for now
-            case 'addMarker': case 'removeMarker':
-            case 'spawnNewPlayhead': case 'deleteCurrentPlayhead':
-            case 'selectPlayhead': case 'addLoopPoint':
-            case 'removeLoopPoint': case 'toggleLooping':
+            case 'cycleCssFilter':        this._cycleCssFilter(+1);  break;
+            case 'cycleMpvPreset':        this._cycleMpvPreset(+1);  break;
+            case 'cycleMpvPresetBack':    this._cycleMpvPreset(-1);  break;
+            case 'addMarker':             this._addMarker();          break;
+            case 'removeMarker':          this._removeNearestMarker(); break;
+            case 'cycleMarkerNext':       this._cycleMarker(+1);      break;
+            case 'cycleMarkerPrev':       this._cycleMarker(-1);      break;
+            case 'spawnNewPlayhead':      this._spawnPlayhead();      break;
+            case 'deleteCurrentPlayhead': this._deleteCurrentPlayhead(); break;
+            case 'cyclePlayheadNext':     this._cyclePlayhead(+1);    break;
+            case 'cyclePlayheadPrev':     this._cyclePlayhead(-1);    break;
+            // silent no-ops (future)
+            case 'addLoopPoint': case 'removeLoopPoint': case 'toggleLooping':
                 break;
         }
     }
@@ -833,6 +903,159 @@ export class PassionPlayer {
         this._keybindOverlayVisible = !this._keybindOverlayVisible;
         const overlay = this.$('.pp-keybinds-overlay');
         if (overlay) overlay.style.display = this._keybindOverlayVisible ? 'flex' : 'none';
+    }
+
+    // ── CSS / mpv filters ────────────────────────────────────────────────────
+
+    _cycleCssFilter(dir) {
+        this._cssFilterIndex = (this._cssFilterIndex + dir + _CSS_FILTERS.length) % _CSS_FILTERS.length;
+        const preset = _CSS_FILTERS[this._cssFilterIndex];
+        if (this.video) this.video.style.filter = preset.filter;
+        this.onCssFilterChange?.(preset.filter, preset.name);
+        this.showOSD(`Filter: ${preset.name}`);
+    }
+
+    _cycleMpvPreset(dir) {
+        this._mpvPresetIndex = (this._mpvPresetIndex + dir + _MPV_PRESETS.length) % _MPV_PRESETS.length;
+        const preset = _MPV_PRESETS[this._mpvPresetIndex];
+        this.onMpvFilterChange?.(preset.vf, preset.name);
+        this.showOSD(`mpv: ${preset.name}`);
+    }
+
+    // ── Markers ──────────────────────────────────────────────────────────────
+
+    _addMarker() {
+        const time = this.video ? this.video.currentTime : this._currentTime;
+        const n = ++this._markerCounter;
+        this._markers.push({ id: n, time, name: `Marker ${n}` });
+        this._markers.sort((a, b) => a.time - b.time);
+        this._renderMarkers();
+        this.showOSD(`Marker ${n} added`);
+    }
+
+    _removeNearestMarker() {
+        if (!this._markers.length) { this.showOSD('No markers'); return; }
+        const cur = this.video ? this.video.currentTime : this._currentTime;
+        let nearest = null, minDist = Infinity;
+        for (const m of this._markers) {
+            const d = Math.abs(m.time - cur);
+            if (d < minDist) { minDist = d; nearest = m; }
+        }
+        if (nearest) {
+            this._markers = this._markers.filter(m => m.id !== nearest.id);
+            this._renderMarkers();
+            this.showOSD(`${nearest.name} removed`);
+        }
+    }
+
+    _renderMarkers() {
+        const layer = this.$('.pp-markers-layer');
+        if (!layer) return;
+        layer.querySelectorAll('.pp-marker').forEach(el => el.remove());
+        const dur = this.video ? this.video.duration : this._duration;
+        if (!dur) return;
+        for (const m of this._markers) {
+            const el = document.createElement('div');
+            el.className = 'pp-marker';
+            el.style.left = (m.time / dur * 100) + '%';
+            const label = document.createElement('span');
+            label.className = 'pp-marker-label';
+            label.textContent = m.name;
+            el.appendChild(label);
+            layer.appendChild(el);
+        }
+    }
+
+    _cycleMarker(dir) {
+        if (!this._markers.length) { this.showOSD('No markers'); return; }
+        const cur = this.video ? this.video.currentTime : this._currentTime;
+        let target;
+        if (dir > 0) {
+            target = this._markers.find(m => m.time > cur + 0.1) ?? this._markers[0];
+        } else {
+            target = [...this._markers].reverse().find(m => m.time < cur - 0.1) ?? this._markers[this._markers.length - 1];
+        }
+        const dur = this.video ? this.video.duration : this._duration;
+        if (!dur) return;
+        const pb = this.$('#progress-bar-default .progress-bar');
+        this.setPlaybackTime(target.time / dur, pb);
+        this.showOSD(target.name);
+        this._showSeekOSD();
+    }
+
+    // ── Playheads ────────────────────────────────────────────────────────────
+
+    _spawnPlayhead() {
+        if (this._playheads.length >= 10) { this.showOSD('Max 9 playheads'); return; } // 1 roaming + 9 static
+        const time = this.video ? this.video.currentTime : this._currentTime;
+        this._playheads.push({ id: ++this._playheadCounter, time });
+        this._activePlayheadIndex = this._playheads.length - 1;
+        this._renderPlayheads();
+        this.showOSD(`+Playhead (${this._playheads.length - 1})`);
+    }
+
+    _deleteCurrentPlayhead() {
+        const idx = this._activePlayheadIndex;
+        if (idx === 0 || this._playheads.length <= 1) { this.showOSD('No playhead to delete'); return; }
+        this._playheads.splice(idx, 1);
+        // Move to last static playhead (or roaming if none left)
+        this._activePlayheadIndex = Math.max(0, this._playheads.length - 1);
+        const ph = this._playheads[this._activePlayheadIndex];
+        const dur = this.video ? this.video.duration : this._duration;
+        if (dur > 0 && this._activePlayheadIndex > 0) {
+            const pb = this.$('#progress-bar-default .progress-bar');
+            this.setPlaybackTime(ph.time / dur, pb);
+            this._showSeekOSD();
+        }
+        this._renderPlayheads();
+        this.showOSD('Playhead removed');
+    }
+
+    _cyclePlayhead(dir) {
+        const count = this._playheads.length - 1; // static playheads only (skip roaming at 0)
+        if (count === 0) { this.showOSD('No playheads set — press C'); return; }
+        const current = Math.max(1, this._activePlayheadIndex);
+        this._activePlayheadIndex = ((current - 1 + dir + count) % count) + 1;
+        const ph = this._playheads[this._activePlayheadIndex];
+        const dur = this.video ? this.video.duration : this._duration;
+        if (!dur) return;
+        const pb = this.$('#progress-bar-default .progress-bar');
+        this.setPlaybackTime(ph.time / dur, pb);
+        this._showSeekOSD();
+    }
+
+    _renderPlayheads() {
+        const layer = this.$('.pp-markers-layer');
+        if (!layer) return;
+        layer.querySelectorAll('.pp-playhead').forEach(el => el.remove());
+        const dur = this.video ? this.video.duration : this._duration;
+        if (!dur) return;
+        for (let i = 0; i < this._playheads.length; i++) {
+            const el = document.createElement('div');
+            el.className = 'pp-playhead';
+            if (i === 0) el.dataset.roaming = '';
+            el.style.left = (this._playheads[i].time / dur * 100) + '%';
+            layer.appendChild(el);
+        }
+    }
+
+    // ── Thumbnail size ───────────────────────────────────────────────────────
+
+    _adjustThumbSize(delta) {
+        const next = Math.round((this._thumbSizeMultiplier + delta) * 10) / 10;
+        this.setThumbnailSize(next);
+        this.showOSD(`Thumb: ${Math.round(this._thumbSizeMultiplier * 100)}%`);
+    }
+
+    _updateThumbSize() {
+        const cont = this.$('#seek-thumbs-container');
+        if (!cont) return;
+        const newH = Math.round(200 * this._thumbSizeMultiplier);
+        cont.style.height = newH + 'px';
+        if (this.seekThumbsSprites) {
+            const holder = cont.querySelector('.seek-thumbnail');
+            if (holder) holder.style.width = (this.seekThumbsSprites[0].w / this.seekThumbsSprites[0].h * newH) + 'px';
+        }
     }
 
     // ====================================================================================================
@@ -950,6 +1173,11 @@ export class PassionPlayer {
         if (paused !== undefined) {
             this._paused = paused;
             if (!paused) this._ensureRaf(); else this._stopRaf();
+            // If an external event paused the video and controls are hidden, show them
+            if (this.shadow && paused && !this._controlsVisible) {
+                clearTimeout(this._hideTimer);
+                this._showControls();
+            }
         }
         if (volume !== undefined) this._volume = volume;
         if (muted !== undefined) this._muted = muted;
@@ -980,6 +1208,14 @@ export class PassionPlayer {
     setClickToTogglePlayback(enabled) {
         this._clickToTogglePlayback = enabled;
     }
+
+    setThumbnailSize(mult) {
+        this._thumbSizeMultiplier = Math.max(0.4, Math.min(3.0, mult));
+        this._updateThumbSize();
+        this.onThumbnailSizeChange?.(this._thumbSizeMultiplier);
+    }
+
+    getThumbnailSize() { return this._thumbSizeMultiplier; }
 
     setKeybindsEnabled(enabled) {
         if (enabled && !this._keybindEngine) {
@@ -1015,6 +1251,16 @@ export class PassionPlayer {
             const perc = (this._currentTime / this._duration) * 100;
             const progressBar = this.$('#progress-bar-default .progress-bar');
             if (progressBar) progressBar.style.width = perc + '%';
+            // Update roaming playhead (index 0) live
+            this._playheads[0].time = this._currentTime;
+            const roaming = this.$('.pp-playhead[data-roaming]');
+            if (roaming) roaming.style.left = perc + '%';
+            // Full re-render only when duration changes
+            if (this._duration !== this._lastRenderedDuration) {
+                this._lastRenderedDuration = this._duration;
+                this._renderMarkers();
+                this._renderPlayheads();
+            }
         }
         const currentEl = this.$('.time-duration-container .current');
         if (currentEl) currentEl.textContent = this._formatTime(this._currentTime);
@@ -1044,14 +1290,22 @@ export class PassionPlayer {
         if (this.video) {
             this.video.paused ? this.playVideo() : this.pauseVideo();
         } else {
-            if (this._paused) { this.onPlay?.(); this.flashPPIndicator('.play-icon'); }
-            else { this.onPause?.(); this.flashPPIndicator('.pause-icon'); }
+            if (this._paused) {
+                this.onPlay?.();
+                this.flashPPIndicator('.play-icon');
+                this._resetHideTimer();
+            } else {
+                this.onPause?.();
+                this.flashPPIndicator('.pause-icon');
+                clearTimeout(this._hideTimer);
+                this._showControls();
+            }
             this._paused = !this._paused;
             this.updatePlayBtn();
         }
     }
 
-    pauseVideo() { this.video.pause(); this.flashPPIndicator('.pause-icon'); this.updatePlayBtn(); }
+    pauseVideo() { this.video.pause(); this.flashPPIndicator('.pause-icon'); this.updatePlayBtn(); this._showControls(); }
     playVideo()  { this.video.play();  this.flashPPIndicator('.play-icon');  this.updatePlayBtn(); }
 
     updatePlayBtn() {
@@ -1226,7 +1480,7 @@ video {
     position: absolute;
     top: 0;
     left: 0;
-    right: 0;
+    max-width: calc(100% - 20px);
     padding: 5px 10px;
     background: rgba(0,0,0,0.55);
     color: #fff;
@@ -1238,6 +1492,7 @@ video {
     z-index: 10;
     opacity: 0;
     transition: opacity 500ms ease;
+    border-radius: 0 0 6px 0;
 }
 
 /* PROGRESS BAR */
@@ -1263,14 +1518,14 @@ video {
 .progress-bar {
     height: 100%;
     width: 0;
-    background: #fff;
+    background: #e8d5b0;
 }
 
 /* CONTROLS BAR */
 
 .controls-bar {
     position: absolute;
-    bottom: 44px;
+    bottom: 28px;
     left: 8px;
     right: 8px;
     display: flex;
@@ -1454,7 +1709,7 @@ video {
 
 .pp-subtitle-overlay {
     position: absolute;
-    bottom: 100px;
+    bottom: 60px;
     left: 0;
     right: 0;
     display: flex;
@@ -1609,30 +1864,51 @@ video {
     margin-bottom: 4px;
 }
 
-/* KEYBINDS TOGGLE BUTTON */
+/* MARKERS & PLAYHEADS */
 
-.pp-keybinds-toggle-btn {
+.pp-markers-layer {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 28px;
-    height: 28px;
-    background: rgba(0,0,0,0.5);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 6px;
-    color: #fff;
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 15;
-    opacity: 0;
-    transition: opacity 500ms ease, background 150ms;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
-    font-family: inherit;
+    z-index: 3;
 }
-.pp-keybinds-toggle-btn:hover { background: rgba(0,0,0,0.8); }
+.pp-marker {
+    position: absolute;
+    bottom: 0;
+    width: 3px;
+    height: 10px;
+    background: rgba(80, 150, 255, 0.9);
+    transform: translateX(-50%);
+    pointer-events: none;
+    border-radius: 2px 2px 0 0;
+}
+.pp-marker-label {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(100, 170, 255, 0.9);
+    font-size: 9px;
+    white-space: nowrap;
+    margin-bottom: 3px;
+    pointer-events: none;
+    user-select: none;
+    line-height: 1;
+    font-weight: 500;
+}
+.pp-playhead {
+    position: absolute;
+    bottom: 0;
+    width: 3px;
+    height: 8px;
+    background: rgba(235, 228, 215, 0.55);
+    transform: translateX(-50%);
+    pointer-events: none;
+    border-radius: 2px 2px 0 0;
+}
 
 /* KEYBINDS OVERLAY */
 

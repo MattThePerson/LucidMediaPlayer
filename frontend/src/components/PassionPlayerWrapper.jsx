@@ -6,8 +6,8 @@ export default function PassionPlayerWrapper({
     info, seekThumbs,
     onTogglePlayback, onSeek, onFullscreen, onVolumeChange, onUIVisible, clickToTogglePlayback,
     subtitleText, subtitleTracks, activeSid, onSubtitleChange, onAddSubtitleFile,
-    onFrameStep, onSpeedChange,
-    title, controlsOverlayKey, disableKeybinds,
+    onFrameStep, onSpeedChange, onMpvFilterChange, onCssFilterChange, onThumbnailSizeChange,
+    title, controlsOverlayKey, disableKeybinds, thumbnailSize,
 }) {
     const hostRef = useRef(null);
     const playerRef = useRef(null);
@@ -21,6 +21,9 @@ export default function PassionPlayerWrapper({
     const onAddSubtitleFileRef = useRef(onAddSubtitleFile);
     const onFrameStepRef = useRef(onFrameStep);
     const onSpeedChangeRef = useRef(onSpeedChange);
+    const onMpvFilterChangeRef = useRef(onMpvFilterChange);
+    const onCssFilterChangeRef = useRef(onCssFilterChange);
+    const onThumbnailSizeChangeRef = useRef(onThumbnailSizeChange);
     onTogglePlaybackRef.current = onTogglePlayback;
     onSeekRef.current = onSeek;
     onFullscreenRef.current = onFullscreen;
@@ -30,6 +33,9 @@ export default function PassionPlayerWrapper({
     onAddSubtitleFileRef.current = onAddSubtitleFile;
     onFrameStepRef.current = onFrameStep;
     onSpeedChangeRef.current = onSpeedChange;
+    onMpvFilterChangeRef.current = onMpvFilterChange;
+    onCssFilterChangeRef.current = onCssFilterChange;
+    onThumbnailSizeChangeRef.current = onThumbnailSizeChange;
 
     useEffect(() => {
         playerRef.current = new PassionPlayer({
@@ -42,10 +48,14 @@ export default function PassionPlayerWrapper({
             onUIVisible:       vis => onUIVisibleRef.current?.(vis),
             onSubtitleChange:  sid => onSubtitleChangeRef.current?.(sid),
             onAddSubtitleFile:  () => onAddSubtitleFileRef.current?.(),
-            onFrameStep:       dir => onFrameStepRef.current?.(dir),
-            onSpeedChange:   speed => onSpeedChangeRef.current?.(speed),
+            onFrameStep:            dir => onFrameStepRef.current?.(dir),
+            onSpeedChange:        speed => onSpeedChangeRef.current?.(speed),
+            onMpvFilterChange: (vf, name) => onMpvFilterChangeRef.current?.(vf, name),
+            onCssFilterChange: (f, name) => onCssFilterChangeRef.current?.(f, name),
+            onThumbnailSizeChange: mult => onThumbnailSizeChangeRef.current?.(mult),
             disable_keybinds: disableKeybinds ?? false,
             controlsOverlayKey: controlsOverlayKey ?? 't',
+            thumbnailSize: thumbnailSize ?? 1.0,
             quiet: true,
         });
         return () => playerRef.current?.destroy();

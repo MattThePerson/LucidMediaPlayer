@@ -8,7 +8,7 @@ import {
     ResizeVideo, SetVolume, GetSeekThumbnailData,
     GetPreferences, SavePreferences, StartSeekThumbnailGeneration, RegenerateSeekThumbnails,
     GetSubtitleState, SetSubtitleTrack, AddSubtitleFile, OpenSubtitleFilePicker,
-    FrameStep, SetPlaybackSpeed,
+    FrameStep, SetPlaybackSpeed, SetVideoFilter,
 } from '../wailsjs/go/main/App';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { debugLog, getDebugLogs } from './debug';
@@ -584,6 +584,12 @@ function App() {
         SetPlaybackSpeed(vidId, speed).catch(console.error);
     }, [effectiveVideoTabId]);
 
+    const handleMpvFilterChange = useCallback((vfStr) => {
+        const vidId = effectiveVideoTabId;
+        if (!vidId) return;
+        SetVideoFilter(vidId, vfStr).catch(console.error);
+    }, [effectiveVideoTabId]);
+
     const handleVolumeChange = useCallback((vol) => {
         const vidId = effectiveVideoTabId;
         if (!vidId) return;
@@ -821,6 +827,7 @@ function App() {
                             onAddSubtitleFile={handleAddSubtitleFile}
                             onFrameStep={handleFrameStep}
                             onSpeedChange={handleSpeedChange}
+                            onMpvFilterChange={handleMpvFilterChange}
                             title={activeTab?.title ?? ''}
                             controlsOverlayKey="F1"
                             disableKeybinds={!effectiveVideoTabId}

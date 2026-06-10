@@ -958,6 +958,16 @@ func (a *App) SetPlaybackSpeed(tabID string, speed float64) {
 	_ = tab.writeIPC(fmt.Sprintf(`{"command": ["set_property", "speed", %g]}`+"\n", speed))
 }
 
+func (a *App) SetVideoFilter(tabID string, vfStr string) {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return
+	}
+	_ = tab.writeIPC(fmt.Sprintf(`{"command": ["vf", "set", %q]}`+"\n", vfStr))
+}
+
 // OpenSubtitleFilePicker opens a native file dialog for selecting a subtitle file.
 func (a *App) OpenSubtitleFilePicker() (string, error) {
 	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
