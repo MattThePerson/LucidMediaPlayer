@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"lucidplayer/internal/config"
+	"lucidmediaplayer/internal/config"
 )
 
 // AppDataDir returns (and creates) the platform-specific app data directory.
@@ -39,7 +39,7 @@ func AppDataDir() (string, error) {
 			base = filepath.Join(home, ".config")
 		}
 	}
-	dir := filepath.Join(base, "LucidPlayer")
+	dir := filepath.Join(base, "LucidMediaPlayer")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

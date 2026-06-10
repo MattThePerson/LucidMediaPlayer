@@ -12,7 +12,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
-	"lucidplayer/internal/config"
+	"lucidmediaplayer/internal/config"
 )
 
 //go:embed all:frontend/dist
@@ -44,7 +44,7 @@ func main() {
 	app.startupFile = startupFile
 
 	err := wails.Run(&options.App{
-		Title:            "Lucid Player",
+		Title:            "Lucid Media Player",
 		Width:            1024,
 		Height:           768,
 		WindowStartState: options.Normal,

@@ -12,7 +12,7 @@ import (
 	// "github.com/Microsoft/go-winio"
 )
 
-const socketPath = "/tmp/lucidplayer.sock"
+const socketPath = "/tmp/lucidmediaplayer.sock"
 
 func trySendToExistingInstance(filePath string) bool {
     conn, err := net.Dial("unix", socketPath)

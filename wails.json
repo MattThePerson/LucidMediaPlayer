@@ -1,8 +1,8 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "Lucid Player",
-  "outputfilename": "LucidPlayer",
-  "version": "0.1.34",
+  "name": "Lucid Media Player",
+  "outputfilename": "LucidMediaPlayer",
+  "version": "0.2.0",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",

@@ -5,26 +5,17 @@ import (
 	"os"
 	"path/filepath"
 
-	"lucidplayer/internal/storage"
+	"lucidmediaplayer/internal/storage"
 )
 
 // Preferences holds user-configurable settings persisted to
-// %APPDATA%\LucidPlayer\config\preferences.json.
+// %APPDATA%\LucidMediaPlayer\config\preferences.json.
 type Preferences struct {
 	AutogenerateSeekThumbs  bool `json:"autogenerateSeekThumbs"`
 	OpenInExistingInstance  bool `json:"openInExistingInstance"`
 	ClickToTogglePlayback   bool `json:"clickToTogglePlayback"`
 	OneVideoAtATime         bool `json:"oneVideoAtATime"`
 }
-
-// func configDir() (string, error) {
-// 	base, err := storage.ProfileDataDir()
-// 	if err != nil {
-// 		return "", err
-// 	}
-// 	dir := filepath.Join(base, "config")
-// 	return dir, os.MkdirAll(dir, 0o755)
-// }
 
 func loadPreferences() Preferences {
 	dir, err := storage.ProfileDataDir()

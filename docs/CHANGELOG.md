@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.2.0] — 2026-06-10
+- Renamed: Lucid Player -> Lucid Media Player
+
 ## [0.1.34] — 2026-06-10
 - Fix: pausing now immediately shows controls regardless of whether controls were hidden or cursor is outside window
 - Fix: playhead deletion now removes the currently active playhead (not nearest by time) and seeks to the last remaining one
@@ -167,12 +170,12 @@
 - Add: `seek-thumbs-generating` event emitted before generation begins; cache hits skip spinner
 
 ## [0.1.12] — 2026-06-08
-- Add: seek thumbnail hover preview — ffmpeg fast-seek generates a 100-frame spritesheet cached per video hash in `%APPDATA%\LucidPlayer\media\<hash>\`
+- Add: seek thumbnail hover preview — ffmpeg fast-seek generates a 100-frame spritesheet cached per video hash in `%APPDATA%\LucidMediaPlayer\media\<hash>\`
 - Add: `setSeekThumbs(vtt, dataURL)` data-push API on PassionPlayer (replaces URL/fetch path); Go reads and base64-encodes files, no HTTP server needed
 - Add: `GetSeekThumbnailData(tabID)` Wails method; `seek-thumbs-ready` event notifies frontend when generation completes
 
 ## [0.1.11] — 2026-06-08
-- Rename: "Sunset Video Player" → "Lucid Player"; AppData dir `SunsetVideoPlayer` → `LucidPlayer`; exe output `LucidPlayer`
+- Rename: "Sunset Video Player" → "Lucid Media Player"; AppData dir `SunsetVideoPlayer` → `LucidMediaPlayer`; exe output `LucidMediaPlayer`
 
 ## [0.1.10] — 2026-06-08
 - Fix: clicking progress bar no longer triggers play/pause toggle (missing stopPropagation let click bubble to player div)
@@ -202,8 +205,8 @@
 - Add: dragging a tab activates it on drop; drag ghost stays within tab bar
 
 ## [0.1.6] — 2026-06-08
-- SQLite database at `%APPDATA%\LucidPlayer\db.sqlite` (modernc.org/sqlite, no CGO)
-- Fix AppData folder name: `"Sunset Video Player"` (spaces) → `"LucidPlayer"` (PascalCase)
+- SQLite database at `%APPDATA%\LucidMediaPlayer\db.sqlite` (modernc.org/sqlite, no CGO)
+- Fix AppData folder name: `"Sunset Video Player"` (spaces) → `"LucidMediaPlayer"` (PascalCase)
 - Save/restore playback position: saves on pause, tab close, and shutdown; restores on re-open
 - Hash-based video identity: 3×64 KB SHA-256 so data survives file renames/moves
 - Recents now stored in DB (last_opened column) instead of `recent.json`
@@ -251,7 +254,7 @@
 - Recently Opened is now a hover fly-out submenu (▸) instead of an inline list
 
 ## [0.0.13] — 2026-06-07
-- Platform-specific AppData directory (`%APPDATA%\LucidPlayer\` on Windows; `~/.config/…` on Linux; `~/Library/…` on macOS)
+- Platform-specific AppData directory (`%APPDATA%\LucidMediaPlayer\` on Windows; `~/.config/…` on Linux; `~/Library/…` on macOS)
 - Recently opened files stored in `data/recent.json` (max 20, deduplicated, most-recent-first)
 - Hamburger dropdown shows "Recent" section with last 10 files; click to reopen, "Clear" to wipe list
 - `GetAppDataDir()` exposed for diagnostics (visible in debug output)

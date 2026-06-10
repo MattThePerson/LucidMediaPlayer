@@ -10,7 +10,7 @@ import (
 	"github.com/Microsoft/go-winio"
 )
 
-const instancePipeName = `\\.\pipe\LucidPlayer-instance`
+const instancePipeName = `\\.\pipe\LucidMediaPlayer-instance`
 
 // trySendToExistingInstance dials the instance pipe and sends filePath.
 // Returns true if an existing instance received it (caller should exit).

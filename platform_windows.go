@@ -109,7 +109,7 @@ func hideSubprocess(cmd *exec.Cmd) {
 // initPlatform finds the Wails parent HWND and subclasses its window procedure.
 // Returns the parent HWND on success.
 func initPlatform(a *App) (uintptr, error) {
-	titlePtr, err := syscall.UTF16PtrFromString("Lucid Player")
+	titlePtr, err := syscall.UTF16PtrFromString("Lucid Media Player")
 	if err != nil {
 		return 0, err
 	}

@@ -13,7 +13,7 @@
 
 ## Project overview
 
-**Lucid Player** — a desktop video player built with [Wails v2](https://wails.io/) (Go backend + React/JSX frontend). Video playback uses **mpv** as a subprocess whose window is embedded into the Wails parent window via Win32 HWND (`--wid`). The UI (tabs, controls, overlays) is rendered by WebView2 on top.
+**Lucid Media Player** — a desktop video player built with [Wails v2](https://wails.io/) (Go backend + React/JSX frontend). Video playback uses **mpv** as a subprocess whose window is embedded into the Wails parent window via Win32 HWND (`--wid`). The UI (tabs, controls, overlays) is rendered by WebView2 on top.
 
 ### Tech stack
 
@@ -70,7 +70,7 @@ Wails window  (Win32 parent HWND)
 | `main.go` | Wails app entry point, options (DragAndDrop, Windows transparency) |
 | `app.go` | All exported Go methods; Win32 helpers; mpv subprocess management; hash/restore goroutines. **Windows-only** (`//go:build windows`) |
 | `database.go` | SQLite init (`db.sqlite`); `VideoRecord` type; all DB CRUD helpers; `hashVideoFile` |
-| `storage.go` | Platform-specific AppData dir (`LucidPlayer`); `RecentEntry` type. **No build constraint** |
+| `storage.go` | Platform-specific AppData dir (`LucidMediaPlayer`); `RecentEntry` type. **No build constraint** |
 | `version.go` | `//go:embed wails.json` for version; `//go:embed docs/CHANGELOG.md` for changelog content |
 
 ### Frontend
@@ -96,9 +96,9 @@ Wails window  (Win32 parent HWND)
 |---|---|
 | `wails.json` | App name, version (source of truth for version number) |
 | `docs/CHANGELOG.md` | User-facing changelog, embedded into the binary |
-| `%APPDATA%\LucidPlayer\db.sqlite` | SQLite database — videos table (hash, filepath, last_pos, etc.) |
-| `%APPDATA%\LucidPlayer\config\` | Future: `preferences.json`, `keybinds.json` |
-| `%APPDATA%\LucidPlayer\media\<hash>\` | Future: seek thumbnails, waveform data per video |
+| `%APPDATA%\LucidMediaPlayer\db.sqlite` | SQLite database — videos table (hash, filepath, last_pos, etc.) |
+| `%APPDATA%\LucidMediaPlayer\config\` | Future: `preferences.json`, `keybinds.json` |
+| `%APPDATA%\LucidMediaPlayer\media\<hash>\` | Future: seek thumbnails, waveform data per video |
 
 ---
 
@@ -282,7 +282,7 @@ The `window.resize` listener uses a **200ms debounce** before calling `ResizeVid
 
 ### AppData folder name is PascalCase
 
-The AppData directory is `LucidPlayer` (no spaces). The window title is `"Lucid Player"` (with spaces). Do not confuse the two — the folder name must not have spaces.
+The AppData directory is `LucidMediaPlayer` (no spaces). The window title is `"Lucid Media Player"` (with spaces). Do not confuse the two — the folder name must not have spaces.
 
 ---
 

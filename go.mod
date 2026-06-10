@@ -1,4 +1,4 @@
-module lucidplayer
+module lucidmediaplayer
 
 go 1.25.0
 

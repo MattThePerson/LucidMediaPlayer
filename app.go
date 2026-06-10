@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"lucidplayer/internal/db"
-	"lucidplayer/internal/storage"
-	"lucidplayer/internal/thumbs"
-	"lucidplayer/internal/config"
+	"lucidmediaplayer/internal/db"
+	"lucidmediaplayer/internal/storage"
+	"lucidmediaplayer/internal/thumbs"
+	"lucidmediaplayer/internal/config"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -665,7 +665,7 @@ func (a *App) SwitchTab(tabID string) error {
 
 	if tabID == "" {
 		a.activeTabID = ""
-		runtime.WindowSetTitle(a.ctx, "Lucid Player")
+		runtime.WindowSetTitle(a.ctx, "Lucid Media Player")
 		return nil
 	}
 
@@ -678,7 +678,7 @@ func (a *App) SwitchTab(tabID string) error {
 		showChild(tab.childHWND)
 	}
 	a.activeTabID = tabID
-	runtime.WindowSetTitle(a.ctx, "Lucid Player - "+filepath.Base(tab.filePath))
+	runtime.WindowSetTitle(a.ctx, "Lucid Media Player - "+filepath.Base(tab.filePath))
 	return nil
 }
 
