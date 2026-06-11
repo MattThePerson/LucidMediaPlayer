@@ -82,6 +82,8 @@ export function SavePreferences(arg1:main.Preferences):Promise<void>;
 
 export function Seek(arg1:string,arg2:number):Promise<void>;
 
+export function SetPaused(arg1:string,arg2:boolean):Promise<void>;
+
 export function SetPlaybackSpeed(arg1:string,arg2:number):Promise<void>;
 
 export function SetProfileColor(arg1:string,arg2:string):Promise<void>;

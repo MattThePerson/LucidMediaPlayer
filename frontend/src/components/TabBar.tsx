@@ -7,6 +7,7 @@ interface Props {
     tabs: Tab[];
     activeTabId: string | null;
     tabsState: TabsStateMap;
+    idleTabIds: Set<string>;
     onSwitch: (tabId: string) => void;
     onClose: (tabId: string) => void;
     onOpenFile: () => void;
@@ -30,7 +31,7 @@ interface Props {
 }
 
 export default function TabBar({
-    tabs, activeTabId, tabsState,
+    tabs, activeTabId, tabsState, idleTabIds,
     onSwitch, onClose,
     onOpenFile, onOpenDebug, onOpenChangelog, onOpenPreferences,
     onNewPlaylist, onOpenFolderAsPlaylist, onOpenFolder,
@@ -212,7 +213,8 @@ export default function TabBar({
                             tab.type === 'playlist' ? 'tab-playlist' : '',
                             tab.type === 'fileexplorer' ? 'tab-fileexplorer' : '',
                             tab.id === draggingId ? 'tab-dragging' : '',
-                            tabsState[tab.id] ? 'tab-is-playing' : '',
+                            tabsState[tab.id] && !idleTabIds.has(tab.id) ? 'tab-is-playing' : '',
+                            idleTabIds.has(tab.id) ? 'tab-is-idle' : '',
                         ].filter(Boolean).join(' ')}
                         draggable
                         onClick={() => onSwitch(tab.id)}

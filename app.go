@@ -947,6 +947,20 @@ func (a *App) TogglePlayback(tabID string) error {
 	return tab.writeIPC(`{"command": ["cycle", "pause"]}` + "\n")
 }
 
+func (a *App) SetPaused(tabID string, paused bool) error {
+	a.tabsMu.RLock()
+	tab, ok := a.tabs[tabID]
+	a.tabsMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("tab not found")
+	}
+	val := "true"
+	if !paused {
+		val = "false"
+	}
+	return tab.writeIPC(`{"command": ["set_property", "pause", ` + val + `]}` + "\n")
+}
+
 func (a *App) Seek(tabID string, pos float64) error {
 	a.tabsMu.RLock()
 	tab, ok := a.tabs[tabID]

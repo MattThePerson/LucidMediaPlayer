@@ -262,6 +262,12 @@ body {
     opacity: 1;
 }
 
+.tab-is-idle::before {
+    opacity: 0.35;
+    animation: none;
+    background: rgba(180, 180, 180, 0.45);
+}
+
 .tab-name {
     flex: 1;
     overflow: hidden;

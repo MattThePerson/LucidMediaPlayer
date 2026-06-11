@@ -18,17 +18,18 @@ type Preferences struct {
 }
 
 func loadPreferences() Preferences {
+	defaults := Preferences{OneVideoAtATime: true}
 	dir, err := storage.ProfileDataDir()
 	if err != nil {
-		return Preferences{}
+		return defaults
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if err != nil {
-		return Preferences{}
+		return defaults
 	}
-	var p Preferences
+	p := defaults
 	if err := json.Unmarshal(data, &p); err != nil {
-		return Preferences{}
+		return defaults
 	}
 	return p
 }

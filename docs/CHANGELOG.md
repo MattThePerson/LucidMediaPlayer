@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.16] — 2026-06-11
+- Fix: rapid Ctrl+Tab cycling no longer leaves videos playing in background tabs
+- Fix: resume timers are now tracked and cancelled if the user switches away before they fire
+- Fix: pause/resume uses idempotent `SetPaused` IPC command instead of toggle, eliminating double-toggle race conditions
+- Fix: `effectiveVideoTabIdRef` is updated imperatively at switch time so rapid calls see the correct tab identity rather than stale rendered state
+
+## [0.2.15] — 2026-06-11
+- Fix: "only play when tab focused" now correctly resumes any auto-paused tab when switching back (was broken when multiple tabs had been auto-paused)
+- Feat: renamed setting to "Only play video when tab focused"; on by default for new installs
+- Feat: idle indicator on background-paused tabs (dim static triangle, distinct from the pulsing "playing" indicator)
+- Feat: opening a video via drag, recents, or file picker now auto-pauses the currently playing tab
+- Feat: toggling the setting ON pauses all background playing tabs; toggling OFF resumes them all
+
 ## [0.2.14] — 2026-06-11
 - Fix: tray right-click no longer focuses the window; menu now has "Open Instance" (focus) and "Close" items
 - Fix: tray tooltip format is "LMP - x tabs open - filename" (profile name in parens when not default); updates on tab switch and close

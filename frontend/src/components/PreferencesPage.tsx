@@ -49,8 +49,8 @@ export default function PreferencesPage({ preferences, onSave }: Props) {
                         onChange={handleToggle('oneVideoAtATime')}
                     />
                     <span>
-                        One video playing at a time
-                        <span className="preference-hint">Switching tabs pauses the current video; switching back resumes it.</span>
+                        Only play video when tab focused
+                        <span className="preference-hint">Pauses background videos automatically; switching back resumes them.</span>
                     </span>
                 </label>
             </div>

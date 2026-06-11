@@ -158,6 +158,10 @@ export function Seek(arg1, arg2) {
   return window['go']['main']['App']['Seek'](arg1, arg2);
 }
 
+export function SetPaused(arg1, arg2) {
+  return window['go']['main']['App']['SetPaused'](arg1, arg2);
+}
+
 export function SetPlaybackSpeed(arg1, arg2) {
   return window['go']['main']['App']['SetPlaybackSpeed'](arg1, arg2);
 }

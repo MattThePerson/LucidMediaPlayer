@@ -3,7 +3,7 @@ import {
     OpenVideo, OpenFilePicker, OpenFilePickerMultiple, OpenFolderPicker, GetMediaFilesInFolder,
     OpenPlaylistVideo, LoadFile,
     SwitchTab, CloseTab,
-    TogglePlayback, Seek, GetPlaybackInfo, GetAllTabsState,
+    TogglePlayback, SetPaused, Seek, GetPlaybackInfo, GetAllTabsState,
     ToggleFullscreen, GetVersion, GetRecentFiles, ClearRecentFiles,
     ResizeVideo, SetVolume, GetSeekThumbnailData,
     GetPreferences, SavePreferences, StartSeekThumbnailGeneration, RegenerateSeekThumbnails,
@@ -57,7 +57,8 @@ function App() {
     const [videoUIVisible, setVideoUIVisible] = useState(false);
     const [debugHUDOpen, setDebugHUDOpen] = useState(false);
     const [viewportH, setViewportH] = useState(window.innerHeight);
-    const [preferences, setPreferences] = useState<main.Preferences>({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false, oneVideoAtATime: false } as main.Preferences);
+    const [preferences, setPreferences] = useState<main.Preferences>({ autogenerateSeekThumbs: false, openInExistingInstance: false, clickToTogglePlayback: false, oneVideoAtATime: true } as main.Preferences);
+    const [idleTabIds, setIdleTabIds] = useState<Set<string>>(new Set());
     const [playlists, setPlaylists] = useState<PlaylistsMap>({});
     const [fileExplorers, setFileExplorers] = useState<FileExplorersMap>({});
     const [renameTabId, setRenameTabId] = useState<string | null>(null);
@@ -70,7 +71,9 @@ function App() {
     const localTimeRef = useRef(0);
     const chordActiveRef = useRef(false);
     const chordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const autoPausedTabIdRef = useRef<string | null>(null);
+    const idleTabIdsRef = useRef<Set<string>>(new Set());
+    idleTabIdsRef.current = idleTabIds;
+    const resumeTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     const playlistsRef = useRef<PlaylistsMap>(playlists);
     playlistsRef.current = playlists;
     const fileExplorersRef = useRef<FileExplorersMap>(fileExplorers);
@@ -85,6 +88,9 @@ function App() {
     infoRef.current = info;
     const tabsStateRef = useRef<TabsStateMap>(tabsState);
     tabsStateRef.current = tabsState;
+
+    const tabsRef = useRef<Tab[]>(tabs);
+    tabsRef.current = tabs;
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
     activeTabRef.current = activeTab;
@@ -222,7 +228,29 @@ function App() {
 
     // ── Playlist tab creation ───────────────────────────────────────────────────
 
+    const pauseVideoForIdle = useCallback((vidId: string | null, frontendTabId: string | null) => {
+        if (!preferencesRef.current?.oneVideoAtATime) return;
+        if (!frontendTabId) return;
+        // If there's a pending resume timer, the user switched away before it fired.
+        // Cancel it and re-add to idle — video is still paused, no IPC needed.
+        const pending = resumeTimersRef.current.get(frontendTabId);
+        if (pending) {
+            clearTimeout(pending);
+            resumeTimersRef.current.delete(frontendTabId);
+            setIdleTabIds(prev => new Set([...prev, frontendTabId]));
+            return;
+        }
+        if (!vidId) return;
+        if (idleTabIdsRef.current.has(frontendTabId)) return;
+        // infoRef is polled every 100–500ms for the active tab — far fresher than tabsState (1s)
+        if (!infoRef.current.paused) {
+            SetPaused(vidId, true).catch(console.error);
+            setIdleTabIds(prev => new Set([...prev, frontendTabId]));
+        }
+    }, []);
+
     const openNewPlaylist = useCallback((initialItems: string[] = []) => {
+        pauseVideoForIdle(effectiveVideoTabIdRef.current, activeTabIdRef.current);
         const id = `playlist-${Date.now()}`;
         SwitchTab('').catch(console.error);
         setPlaylists(prev => ({
@@ -231,7 +259,7 @@ function App() {
         }));
         setTabs(prev => [...prev, { id, type: 'playlist', title: 'Playlist' }]);
         setActiveTabId(id);
-    }, []);
+    }, [pauseVideoForIdle]);
 
     const openFolderAsPlaylist = useCallback(async () => {
         try {
@@ -253,6 +281,7 @@ function App() {
         try {
             const folder = await OpenFolderPicker();
             if (!folder) return;
+            pauseVideoForIdle(effectiveVideoTabIdRef.current, activeTabIdRef.current);
             const id = `fileexplorer-${Date.now()}`;
             const folderName = folder.split(/[\\/]/).pop() || folder;
             SwitchTab('').catch(console.error);
@@ -276,7 +305,7 @@ function App() {
         } catch (e) {
             debugLog('OpenFolder', 'ERROR: ' + e);
         }
-    }, []);
+    }, [pauseVideoForIdle]);
 
     const handleExplorerNavigate = useCallback((exTabId: string, path: string) => {
         setFileExplorers(prev => {
@@ -415,6 +444,7 @@ function App() {
     // ── Core callbacks ──────────────────────────────────────────────────────────
 
     const openVideoPath = useCallback(async (filePath: string) => {
+        pauseVideoForIdle(effectiveVideoTabIdRef.current, activeTabIdRef.current);
         const filename = filePath.split(/[\\/]/).pop() ?? filePath;
         debugLog('OpenVideo', 'opening: ' + filePath);
         try {
@@ -428,7 +458,7 @@ function App() {
         } catch (e) {
             debugLog('OpenVideo', 'ERROR: ' + e);
         }
-    }, []);
+    }, [pauseVideoForIdle]);
 
     const handlePlaylistAddFilesRef = useRef(handlePlaylistAddFiles);
     handlePlaylistAddFilesRef.current = handlePlaylistAddFiles;
@@ -623,23 +653,18 @@ function App() {
     }, []);
 
     const handleSwitchTab = useCallback(async (tabId: string) => {
+        // Capture current identity before any updates so rapid calls don't re-read stale refs
+        const prevVidId = effectiveVideoTabIdRef.current;
+        const prevFrontendTabId = activeTabIdRef.current;
+        // Stake the new active tab imperatively — next rapid call sees updated identity, not stale render
+        activeTabIdRef.current = tabId;
+        effectiveVideoTabIdRef.current = null; // render will correct to the new tab's vidId
+
         if (renameTabIdRef.current !== null) setRenameTabId(null);
         setTabContextMenu(null);
-        if (tabId === activeTabId) return;
+        if (tabId === prevFrontendTabId) return;
 
-        if (preferencesRef.current?.oneVideoAtATime) {
-            const curTab = activeTabRef.current;
-            const curVidId: string | null =
-                curTab?.type === 'video' ? activeTabId :
-                curTab?.type === 'playlist' ? ((activeTabId ? playlists[activeTabId]?.videoTabId : null) ?? null) :
-                curTab?.type === 'fileexplorer' ? ((activeTabId ? fileExplorers[activeTabId]?.videoTabId : null) ?? null) :
-                null;
-            const isPlaying = (curVidId ? tabsStateRef.current[curVidId] : undefined) ?? !infoRef.current.paused;
-            if (curVidId && isPlaying) {
-                TogglePlayback(curVidId).catch(console.error);
-                autoPausedTabIdRef.current = activeTabId;
-            }
-        }
+        pauseVideoForIdle(prevVidId, prevFrontendTabId);
 
         const tab = tabId ? tabs.find(t => t.id === tabId) : null;
         let goTabId = '';
@@ -650,19 +675,27 @@ function App() {
         setActiveTabId(tabId ?? null);
         if (!goTabId) setInfo({ time_pos: 0, duration: 0, paused: true } as main.PlaybackInfo);
 
-        if (preferencesRef.current?.oneVideoAtATime && tabId === autoPausedTabIdRef.current) {
-            autoPausedTabIdRef.current = null;
-            const vidId = tab?.type === 'video' ? tabId
-                : tab?.type === 'playlist' ? (tabId ? playlists[tabId]?.videoTabId : undefined)
-                : tab?.type === 'fileexplorer' ? (tabId ? fileExplorers[tabId]?.videoTabId : undefined)
-                : undefined;
-            if (vidId) setTimeout(() => TogglePlayback(vidId).catch(console.error), 150);
+        if (preferencesRef.current?.oneVideoAtATime && idleTabIdsRef.current.has(tabId)) {
+            setIdleTabIds(prev => { const n = new Set(prev); n.delete(tabId); return n; });
+            const vidId = goTabId || undefined;
+            if (vidId) {
+                const existing = resumeTimersRef.current.get(tabId);
+                if (existing) clearTimeout(existing);
+                const timer = setTimeout(() => {
+                    resumeTimersRef.current.delete(tabId);
+                    SetPaused(vidId, false).catch(console.error);
+                }, 150);
+                resumeTimersRef.current.set(tabId, timer);
+            }
         }
-    }, [activeTabId, tabs, playlists, fileExplorers]);
+    }, [tabs, playlists, fileExplorers, pauseVideoForIdle]);
 
     const handleCloseTab = useCallback(async (tabId: string) => {
         if (renameTabIdRef.current === tabId) setRenameTabId(null);
         setRenameHistory(prev => { const n = new Map(prev); n.delete(tabId); return n; });
+        setIdleTabIds(prev => { const n = new Set(prev); n.delete(tabId); return n; });
+        const pendingResume = resumeTimersRef.current.get(tabId);
+        if (pendingResume) { clearTimeout(pendingResume); resumeTimersRef.current.delete(tabId); }
         const idx = tabs.findIndex(t => t.id === tabId);
         const tab = tabs.find(t => t.id === tabId);
 
@@ -721,11 +754,12 @@ function App() {
             handleSwitchTab(existing.id);
             return;
         }
+        pauseVideoForIdle(effectiveVideoTabIdRef.current, activeTabIdRef.current);
         const id = `${type}-${Date.now()}`;
         SwitchTab('').catch(console.error);
         setTabs(prev => [...prev, { id, type, title: PAGE_TITLES[type] }]);
         setActiveTabId(id);
-    }, [tabs, handleSwitchTab]);
+    }, [tabs, handleSwitchTab, pauseVideoForIdle]);
 
     const handleClearRecent = useCallback(() => {
         ClearRecentFiles().catch(console.error);
@@ -814,8 +848,41 @@ function App() {
     }, [effectiveVideoTabId]);
 
     const handleSavePreferences = useCallback((prefs: main.Preferences) => {
+        const prev = preferencesRef.current;
         SavePreferences(prefs).catch(console.error);
         setPreferences(prefs);
+
+        if (!prev.oneVideoAtATime && prefs.oneVideoAtATime) {
+            // Turned ON: pause all background playing video tabs
+            const activeId = activeTabIdRef.current;
+            const newIdle = new Set<string>();
+            for (const tab of tabsRef.current) {
+                if (tab.id === activeId) continue;
+                let vidId: string | null = null;
+                if (tab.type === 'video') vidId = tab.id;
+                else if (tab.type === 'playlist') vidId = playlistsRef.current[tab.id]?.videoTabId ?? null;
+                else if (tab.type === 'fileexplorer') vidId = fileExplorersRef.current[tab.id]?.videoTabId ?? null;
+                if (vidId && tabsStateRef.current[vidId]) {
+                    SetPaused(vidId, true).catch(console.error);
+                    newIdle.add(tab.id);
+                }
+            }
+            if (newIdle.size > 0) setIdleTabIds(prev => new Set([...prev, ...newIdle]));
+        } else if (prev.oneVideoAtATime && !prefs.oneVideoAtATime) {
+            // Turned OFF: resume all idle tabs
+            idleTabIdsRef.current.forEach(tabId => {
+                const pending = resumeTimersRef.current.get(tabId);
+                if (pending) { clearTimeout(pending); resumeTimersRef.current.delete(tabId); }
+                const tab = tabsRef.current.find(t => t.id === tabId);
+                if (!tab) return;
+                let vidId: string | null = null;
+                if (tab.type === 'video') vidId = tabId;
+                else if (tab.type === 'playlist') vidId = playlistsRef.current[tabId]?.videoTabId ?? null;
+                else if (tab.type === 'fileexplorer') vidId = fileExplorersRef.current[tabId]?.videoTabId ?? null;
+                if (vidId) SetPaused(vidId, false).catch(console.error);
+            });
+            setIdleTabIds(new Set());
+        }
     }, []);
 
     const handleCreateProfile = useCallback(async (name: string, color: string) => {
@@ -1143,6 +1210,7 @@ function App() {
                     tabs={tabs}
                     activeTabId={activeTabId}
                     tabsState={effectiveTabsState}
+                    idleTabIds={idleTabIds}
                     onSwitch={handleSwitchTab}
                     onClose={handleCloseTab}
                     onOpenFile={handleOpenFile}
