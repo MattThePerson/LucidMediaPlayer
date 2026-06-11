@@ -60,6 +60,7 @@ const (
 	scKeyMenu     = uintptr(0xF100)
 	wmActivate    = uintptr(0x0006)
 	wmFocusWebview = uintptr(0x8001) // WM_APP+1: route SetFocus through message thread
+	wmTrayIcon     = uintptr(0x8002) // WM_APP+2: tray icon callback
 )
 
 type monitorInfo struct {
@@ -74,6 +75,7 @@ var (
 	wndProcCallback uintptr
 	gWebviewHWND    uintptr
 	gSetFocusCount  int
+	gApp            *App
 )
 
 func wndProcSubclass(hwnd, msg, wParam, lParam uintptr) uintptr {
@@ -84,6 +86,10 @@ func wndProcSubclass(hwnd, msg, wParam, lParam uintptr) uintptr {
 	if msg == wmFocusWebview && gWebviewHWND != 0 {
 		setFocusProc.Call(gWebviewHWND)
 		gSetFocusCount++
+		return 0
+	}
+	if msg == wmTrayIcon && gApp != nil {
+		handleTrayMessage(gApp, lParam)
 		return 0
 	}
 	ret, _, _ := callWindowProcProc.Call(origWndProc, hwnd, msg, wParam, lParam)
@@ -150,6 +156,7 @@ func initPlatform(a *App) (uintptr, error) {
 
 	wndProcCallback = syscall.NewCallback(wndProcSubclass)
 	origWndProc, _, _ = setWindowLongPtrProc.Call(hwnd, gwlpWndProc, wndProcCallback)
+	gApp = a
 
 	return hwnd, nil
 }

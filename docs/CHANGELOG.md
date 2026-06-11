@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.14] — 2026-06-11
+- Fix: tray right-click no longer focuses the window; menu now has "Open Instance" (focus) and "Close" items
+- Fix: tray tooltip format is "LMP - x tabs open - filename" (profile name in parens when not default); updates on tab switch and close
+- Fix: tray tooltip and window title used em dash, replaced with hyphen
+
+## [0.2.13] — 2026-06-11
+- Feat: system tray icon — each instance shows an icon; left-click focuses window, right-click menu shows profile name and "Close" option
+
 ## [0.2.12] — 2026-06-10
 - Feat: file explorer tab — details/list/grid views, sort by name/size/duration/type/date, editable location bar, HJKL navigation, on-demand thumbnails, seek-thumb hover preview in grid view, embedded video playback with prev/next/close overlay
 

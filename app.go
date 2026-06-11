@@ -235,6 +235,7 @@ type App struct {
 	prefs            Preferences
 	startupFile      string
 	domReady         bool // guards against double onDomReady fire in dev hot-reload
+	trayHIcon        uintptr
 	// profile          string
 }
 
@@ -274,6 +275,9 @@ func (a *App) onDomReady(ctx context.Context) {
 	}
 	a.parentHWND = hwnd
 	a.emitDebug("startup", fmt.Sprintf("parentHWND=%d — ready", hwnd))
+	if err := initTray(a); err != nil {
+		a.emitDebug("tray", "initTray failed: "+err.Error())
+	}
 
 	child, _, _ := getWindowProc.Call(hwnd, gwChild)
 	if child != 0 {
@@ -304,6 +308,7 @@ func (a *App) emitDebug(source, message string) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	destroyTray(a)
 	a.tabsMu.Lock()
 	defer a.tabsMu.Unlock()
 	for tabID, tab := range a.tabs {
@@ -803,6 +808,7 @@ func (a *App) SwitchTab(tabID string) error {
 	if tabID == "" {
 		a.activeTabID = ""
 		runtime.WindowSetTitle(a.ctx, "Lucid Media Player")
+		go updateTrayTooltip(a)
 		return nil
 	}
 
@@ -816,6 +822,7 @@ func (a *App) SwitchTab(tabID string) error {
 	}
 	a.activeTabID = tabID
 	runtime.WindowSetTitle(a.ctx, "Lucid Media Player - "+filepath.Base(tab.filePath))
+	go updateTrayTooltip(a)
 	return nil
 }
 
@@ -907,6 +914,7 @@ func (a *App) CloseTab(tabID string) error {
 		a.emitDebug("CloseTab", fmt.Sprintf("killing pid=%d", tab.mpvCmd.Process.Pid))
 		tab.mpvCmd.Process.Kill()
 	}
+	go updateTrayTooltip(a)
 	return nil
 }
 
